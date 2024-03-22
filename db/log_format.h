@@ -11,19 +11,23 @@
 namespace leveldb {
 namespace log {
 
+/**
+ * @brief 日志按照chunk进行存储，每个chunk的类型
+ */
 enum RecordType {
   // Zero is reserved for preallocated files
   kZeroType = 0,
 
-  kFullType = 1,
+  kFullType = 1,    // 完整的一条record
 
-  // For fragments
+  // For fragments  // record过大，进行分段
   kFirstType = 2,
   kMiddleType = 3,
   kLastType = 4
 };
 static const int kMaxRecordType = kLastType;
 
+/// block的大小，即32KB
 static const int kBlockSize = 32768;
 
 // Header is checksum (4 bytes), length (2 bytes), type (1 byte).

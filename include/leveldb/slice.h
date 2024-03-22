@@ -24,6 +24,12 @@
 
 namespace leveldb {
 
+/**
+ * @brief 通过slice来管理一个字符串对象
+ * @param data_ const char *  -- 字符串的首指针
+ * @param size_ size_t -- 字符串的大小
+ * 通过指针进行管理数据，不发生拷贝，提供高性能操作
+ */
 class LEVELDB_EXPORT Slice {
  public:
   // Create an empty slice.
@@ -81,6 +87,7 @@ class LEVELDB_EXPORT Slice {
   int compare(const Slice& b) const;
 
   // Return true iff "x" is a prefix of "*this"
+  /// 判断某个slice是否是当前对象的前缀
   bool starts_with(const Slice& x) const {
     return ((size_ >= x.size_) && (memcmp(data_, x.data_, x.size_) == 0));
   }
@@ -97,6 +104,11 @@ inline bool operator==(const Slice& x, const Slice& y) {
 
 inline bool operator!=(const Slice& x, const Slice& y) { return !(x == y); }
 
+/**
+ * @brief slice的对比，实际上和memcmp的实现原理一致
+ * @param b
+ * @return int
+ */
 inline int Slice::compare(const Slice& b) const {
   const size_t min_len = (size_ < b.size_) ? size_ : b.size_;
   int r = memcmp(data_, b.data_, min_len);

@@ -1197,6 +1197,13 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
   return DB::Delete(options, key);
 }
 
+/**
+ * @brief 重载自DB的虚函数，进行写入
+ *
+ * @param options
+ * @param updates
+ * @return Status
+ */
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   Writer w(&mutex_);
   w.batch = updates;

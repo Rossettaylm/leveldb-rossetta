@@ -53,6 +53,9 @@ class LEVELDB_EXPORT Status {
     return Status(kIOError, msg, msg2);
   }
 
+  /**
+   * @brief 工厂模式，只能生成OK或者给定的错误码，将错误码的构造函数指定为private，防止外部调用
+   */
   // Returns true iff the status indicates success.
   bool ok() const { return (state_ == nullptr); }
 
@@ -76,6 +79,9 @@ class LEVELDB_EXPORT Status {
   std::string ToString() const;
 
  private:
+  /**
+   * @brief 内建状态码，用于提示操作状态
+   */
   enum Code {
     kOk = 0,
     kNotFound = 1,
@@ -89,14 +95,21 @@ class LEVELDB_EXPORT Status {
     return (state_ == nullptr) ? kOk : static_cast<Code>(state_[4]);
   }
 
+  /**
+   * @brief Construct a new Status object (private函数)
+   * @param code 错误码
+   * @param msg  报错信息
+   * @param msg2
+   */
   Status(Code code, const Slice& msg, const Slice& msg2);
   static const char* CopyState(const char* s);
 
   // OK status has a null state_.  Otherwise, state_ is a new[] array
+  //! OK 状态为空指针，否则通过new分配动态内存
   // of the following form:
   //    state_[0..3] == length of message
   //    state_[4]    == code
-  //    state_[5..]  == message
+  //    state_[5..]  == message  //? message 即详细的状态信息
   const char* state_;
 };
 
@@ -113,6 +126,7 @@ inline Status& Status::operator=(const Status& rhs) {
   return *this;
 }
 inline Status& Status::operator=(Status&& rhs) noexcept {
+  // 交换指针，内存释放交给rhs的析构函数来
   std::swap(state_, rhs.state_);
   return *this;
 }
