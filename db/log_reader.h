@@ -20,12 +20,17 @@ namespace log {
 class Reader {
  public:
   // Interface for reporting errors.
+  /**
+   * @brief 用于报告错误的接口类
+   */
+   //* Reader::Reporter
   class Reporter {
    public:
     virtual ~Reporter();
 
     // Some corruption was detected.  "bytes" is the approximate number
     // of bytes dropped due to the corruption.
+    //? 检测到一些损坏，bytes参数是由于损坏而丢弃的大约字节数
     virtual void Corruption(size_t bytes, const Status& status) = 0;
   };
 
@@ -40,6 +45,14 @@ class Reader {
   //
   // The Reader will start reading at the first record located at physical
   // position >= initial_offset within the file.
+  /**
+   * @brief 从顺序file文件中读取record
+   *
+   * @param file 顺序文件，存放日志数据
+   * @param reporter 用于报告损坏错误，如果非空，则进行通知，无论是否有数据被丢弃
+   * @param checksum bool值，用于检测checksum
+   * @param initial_offset 文件开始读取的偏移量
+   */
   Reader(SequentialFile* file, Reporter* reporter, bool checksum,
          uint64_t initial_offset);
 
