@@ -140,6 +140,11 @@ class SkipList {
 };
 
 // Implementation details follow
+/**
+ * @brief Node的实现细节
+ * @tparam Key
+ * @tparam Comparator 比较器
+ */
 template <typename Key, class Comparator>
 struct SkipList<Key, Comparator>::Node {
   explicit Node(const Key& k) : key(k) {}
@@ -152,12 +157,17 @@ struct SkipList<Key, Comparator>::Node {
     assert(n >= 0);
     // Use an 'acquire load' so that we observe a fully initialized
     // version of the returned Node.
+    //? 读保证，后续的读操作不能出现在取Next节点之前。保证对Next节点访问的内存一致性
+    // 通俗来说，如果之后的读操作依赖于先对Next节点进行读取，则需要保证之后的read不被重排到读取Next节点之前
     return next_[n].load(std::memory_order_acquire);
   }
+
   void SetNext(int n, Node* x) {
     assert(n >= 0);
     // Use a 'release store' so that anybody who reads through this
     // pointer observes a fully initialized version of the inserted node.
+    //? 写保证，之前的写操作不能出现在修改Next节点之后。保证对Next节点修改的内存一致性
+    // 通俗来说，如果对Next节点的更改依赖于之前的某个写操作，则需要对其写顺序进行重排限制
     next_[n].store(x, std::memory_order_release);
   }
 

@@ -100,7 +100,7 @@ class Reader {
 
   SequentialFile* const file_;
   Reporter* const reporter_;
-  bool const checksum_;
+  bool const checksum_;     //* 用于开启crc校验的标志位
   char* const backing_store_;
   Slice buffer_;
   bool eof_;  // Last Read() indicated EOF by returning < kBlockSize

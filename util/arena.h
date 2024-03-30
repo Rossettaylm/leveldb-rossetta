@@ -13,6 +13,10 @@
 
 namespace leveldb {
 
+/**
+ * @brief 用于进行内存分配
+ * //? 按Block大小进行分配，避免小内存分配造成碎片
+ */
 class Arena {
  public:
   Arena();
@@ -52,6 +56,13 @@ class Arena {
   std::atomic<size_t> memory_usage_;
 };
 
+/**
+ * @brief 内存分配策略
+ * 1. block中剩余空间足够，则直接分配
+ * 2. block中剩余空间不足，则分配新的堆内存
+ * @param bytes
+ * @return char*
+ */
 inline char* Arena::Allocate(size_t bytes) {
   // The semantics of what to return are a bit messy if we allow
   // 0-byte allocations, so we disallow them here (we don't need
@@ -63,6 +74,9 @@ inline char* Arena::Allocate(size_t bytes) {
     alloc_bytes_remaining_ -= bytes;
     return result;
   }
+
+  //? 如果之前分配的block还有剩余的内存，则不再使用
+  //? (0 <= alloc_bytes_remaining_ && alloc_bytes_remaining_ < bytes)
   return AllocateFallback(bytes);
 }
 

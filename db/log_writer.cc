@@ -36,9 +36,10 @@ Writer::~Writer() = default;
 
 /**
  * @brief
- * 将slice进行切分，作为多个record进行写入日志，并为每个record添加一个head
- * 其中record等价于文档中的chunk
- * @param slice
+ * 将record进行切分，作为多个chunk进行写入日志，并为每个chunk添加一个head
+ * 每个chunk中标记了一个type，从first~last是为一条完整的record
+ * record可以跨block进行存储
+ * @param slice : record
  * @return Status
  */
 Status Writer::AddRecord(const Slice &slice) {
@@ -96,6 +97,8 @@ Status Writer::AddRecord(const Slice &slice) {
         }
 
         //* 执行写入日志的操作
+        //* 返回一个Status，s.ok()判断是否将数据写入成功
+        //* 值得注意的是，一次emit是一条chunk
         s = EmitPhysicalRecord(type, ptr, fragment_length);
 
         // 更新分段的内容
@@ -109,6 +112,7 @@ Status Writer::AddRecord(const Slice &slice) {
 
 /**
  * @brief 执行一次日志的物理写入，即一条record/chunk
+ *        调用dest_->Append(slice);
  *
  * @param t       当前record的类型 fulltype/firsttype/middletype/lasttype
  * @param ptr     当前执行写入data的开始地址
@@ -117,15 +121,16 @@ Status Writer::AddRecord(const Slice &slice) {
  */
 Status Writer::EmitPhysicalRecord(RecordType t, const char *ptr,
                                   size_t length) {
-    assert(length <= 0xffff);  // Must fit in two bytes //?
-                               // 长度小于65535，length用两个字节表示
+    //*  | checksum 4bytes | length 2bytes | type 1byte | data  |
+    //*  |             head                             | data  |
+
+    assert(length <= 0xffff);  // Must fit in two bytes
+                               // //?长度小于65535，length用两个字节表示
     assert(block_offset_ + kHeaderSize + length <=
            kBlockSize);  // 保证不超过一个block大小
 
     // Format the header
-    //* 1.格式化head | checksum 4bytes | length 2bytes | type 1byte | data
-    // length-bytes |
-    //*             |             head                             |      data |
+    //* 格式化header
     char buf[kHeaderSize];
 
     // 取length的低16位，满足两字节需求，按照小端法存放

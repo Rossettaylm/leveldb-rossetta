@@ -28,7 +28,8 @@ namespace leveldb {
  * @brief 通过slice来管理一个字符串对象
  * @param data_ const char *  -- 字符串的首指针
  * @param size_ size_t -- 字符串的大小
- * 通过指针进行管理数据，不发生拷贝，提供高性能操作
+ * //!通过指针进行管理数据，不发生拷贝，提供高性能操作
+ * //!类似于string_view
  */
 class LEVELDB_EXPORT Slice {
  public:
