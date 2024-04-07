@@ -158,7 +158,7 @@ TEST(SkipTest, InsertAndLookup) {
 // been concurrently added since the iterator started.
 class ConcurrentTest {
   private:
-    static constexpr uint32_t K = 4;
+    static constexpr uint32_t K = 4;        // 总的线程数
 
     static uint64_t key(Key key) { return (key >> 40); }
     static uint64_t gen(Key key) { return (key >> 8) & 0xffffffffu; }
@@ -169,6 +169,13 @@ class ConcurrentTest {
         return Hash(reinterpret_cast<char*>(data), sizeof(data), 0);
     }
 
+    /**
+     * @brief 生成key
+     *
+     * @param k 线程id
+     * @param g 线程更新状态
+     * @return Key
+     */
     static Key MakeKey(uint64_t k, uint64_t g) {
         static_assert(sizeof(Key) == sizeof(uint64_t), "");
         assert(k <=
@@ -226,21 +233,24 @@ class ConcurrentTest {
     void WriteStep(Random* rnd) {
         const uint32_t k = rnd->Next() % K;
         const intptr_t g = current_.Get(k) + 1;
-        const Key key = MakeKey(k, g);
+        const Key key = MakeKey(k, g);      //* 根据当前线程k和线程状态g来生成一个key
         list_.Insert(key);
         current_.Set(k, g);
     }
 
     void ReadStep(Random* rnd) {
         // Remember the initial committed state of the skiplist.
+        //* 获取初始状态
         State initial_state;
         for (int k = 0; k < K; k++) {
             initial_state.Set(k, current_.Get(k));
         }
 
+        //* 生成一个随机key并进行定位
         Key pos = RandomTarget(rnd);
         SkipList<Key, Comparator>::Iterator iter(&list_);
         iter.Seek(pos);
+
         while (true) {
             Key current;
             if (!iter.Valid()) {
@@ -318,7 +328,7 @@ class TestState {
     void Wait(ReaderState s) LOCKS_EXCLUDED(mu_) {
         mu_.Lock();
         while (state_ != s) {
-            state_cv_.Wait();
+            state_cv_.Wait();  // adopt_lock
         }
         mu_.Unlock();
     }

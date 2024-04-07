@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 //
+
+//! rep_的数据存放格式
 // WriteBatch::rep_ :=
-//    sequence: fixed64
+//    sequence: fixed64     //* head = 8Bytes + 4Bytes
 //    count: fixed32
-//    data: record[count]
+//    data: record[count]   //* data
 // record :=
-//    kTypeValue varstring varstring         |
-//    kTypeDeletion varstring
+//    kTypeValue varstring varstring     //* put:   type; keylen, keydata;  valuelen, valuedata
+//    kTypeDeletion varstring            //* deletion: type; keylen, keydata   -- 删除操作没有数据
 // varstring :=
-//    len: varint32
+//    len: varint32    //* 可变长32位数据，表示长度
 //    data: uint8[len]
 
 #include "leveldb/write_batch.h"
@@ -39,6 +41,11 @@ void WriteBatch::Clear() {
 
 size_t WriteBatch::ApproximateSize() const { return rep_.size(); }
 
+/**
+ * @brief 循环从rep中解析键值对，并插入到memtable中
+ * @param handler memtableHandler 提供put和delete借口对memtable* 进行操作
+ * @return Status
+ */
 Status WriteBatch::Iterate(Handler* handler) const {
   Slice input(rep_);
   if (input.size() < kHeader) {
@@ -48,6 +55,7 @@ Status WriteBatch::Iterate(Handler* handler) const {
   input.remove_prefix(kHeader);
   Slice key, value;
   int found = 0;
+
   while (!input.empty()) {
     found++;
     char tag = input[0];
@@ -72,6 +80,8 @@ Status WriteBatch::Iterate(Handler* handler) const {
         return Status::Corruption("unknown WriteBatch tag");
     }
   }
+
+  //* 判断一个batch中的record数量是否正确
   if (found != WriteBatchInternal::Count(this)) {
     return Status::Corruption("WriteBatch has wrong count");
   } else {
@@ -79,6 +89,11 @@ Status WriteBatch::Iterate(Handler* handler) const {
   }
 }
 
+/**
+ * @brief 计算batch中包含几条record记录
+ * @param b
+ * @return int
+ */
 int WriteBatchInternal::Count(const WriteBatch* b) {
   return DecodeFixed32(b->rep_.data() + 8);
 }
@@ -98,6 +113,7 @@ void WriteBatchInternal::SetSequence(WriteBatch* b, SequenceNumber seq) {
 void WriteBatch::Put(const Slice& key, const Slice& value) {
   WriteBatchInternal::SetCount(this, WriteBatchInternal::Count(this) + 1);
   rep_.push_back(static_cast<char>(kTypeValue));
+  //* 输入带有前置长度的slice，即keylen，key
   PutLengthPrefixedSlice(&rep_, key);
   PutLengthPrefixedSlice(&rep_, value);
 }

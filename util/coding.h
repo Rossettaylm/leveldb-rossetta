@@ -17,7 +17,13 @@
 #include "leveldb/slice.h"
 #include "port/port.h"
 
+/**
+ * @brief
+ * encode: 小端变大端
+ * decode: 大端变小端
+ */
 namespace leveldb {
+
 
 // Standard Put... routines append to a string
 void PutFixed32(std::string* dst, uint32_t value);

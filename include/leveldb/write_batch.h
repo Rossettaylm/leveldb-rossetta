@@ -75,6 +75,9 @@ class LEVELDB_EXPORT WriteBatch {
  private:
   friend class WriteBatchInternal;
 
+  //* representation of the contents of writebatch -- writebatch的表示
+  //* | sequence 8Bytes |  count 4Bytes   |        data1        |        data2        |     ...      |
+  //* |             head                  |                      data                                |
   std::string rep_;  // See comment in write_batch.cc for the format of rep_
 };
 

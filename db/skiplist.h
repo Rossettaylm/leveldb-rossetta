@@ -108,6 +108,13 @@ class SkipList {
         // Intentionally copyable
     };
 
+    // Iterator begin() {
+    //     Iterator iter(this);
+    //     iter.SeekToFirst();
+    //     return iter;
+    // }
+
+
   private:
     enum { kMaxHeight = 12 };
 
@@ -199,7 +206,7 @@ struct SkipList<Key, Comparator>::Node {
 
   private:
     // Array of length equal to the node height.  next_[0] is lowest level link.
-    //? 只分配了一层的next指针，其余通过NewNode函数在堆上分配连续内存来存放
+    //? 只分配了一层的next指针，其余通过NewNode函数在堆上分配连续内存来存放，需要配合arena来管理内存
     //! 动态指定层高的一种方法
     std::atomic<Node*> next_[1];
 };

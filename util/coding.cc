@@ -18,10 +18,19 @@ void PutFixed64(std::string* dst, uint64_t value) {
   dst->append(buf, sizeof(buf));
 }
 
+/**
+ * @brief 变长32位编码，7位为一组，用第8位标志字节中含有数据，即v > 128
+ * 其中，变长编码的长度范围为[0, 5]
+ * 32 / 7 向上取整
+ *
+ * @param dst
+ * @param v
+ * @return char*
+ */
 char* EncodeVarint32(char* dst, uint32_t v) {
   // Operate on characters as unsigneds
   uint8_t* ptr = reinterpret_cast<uint8_t*>(dst);
-  static const int B = 128;
+  static const int B = 128;  // 2^7  0b10000000 0x80
   if (v < (1 << 7)) {
     *(ptr++) = v;
   } else if (v < (1 << 14)) {
