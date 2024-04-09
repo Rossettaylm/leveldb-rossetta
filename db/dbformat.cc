@@ -44,6 +44,13 @@ const char* InternalKeyComparator::Name() const {
   return "leveldb.InternalKeyComparator";
 }
 
+/**
+ * @brief 进行InternalKey的比较
+ *
+ * @param akey 不包含keylen的InternalKey
+ * @param bkey 不包含keylen的InternalKey
+ * @return int
+ */
 int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   // Order by:
   //    increasing user key (according to user-supplied comparator)
@@ -51,7 +58,7 @@ int InternalKeyComparator::Compare(const Slice& akey, const Slice& bkey) const {
   //    decreasing type (though sequence# should be enough to disambiguate)
   int r = user_comparator_->Compare(ExtractUserKey(akey), ExtractUserKey(bkey));
   if (r == 0) {
-    const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8);
+    const uint64_t anum = DecodeFixed64(akey.data() + akey.size() - 8); // 获取InternalKey中的tag进行比较
     const uint64_t bnum = DecodeFixed64(bkey.data() + bkey.size() - 8);
     if (anum > bnum) {
       r = -1;
@@ -118,18 +125,29 @@ LookupKey::LookupKey(const Slice& user_key, SequenceNumber s) {
   size_t usize = user_key.size();
   size_t needed = usize + 13;  // A conservative estimate
   char* dst;
+
+  //* 根据所需空间判断是否要在堆上进行内存分配
   if (needed <= sizeof(space_)) {
     dst = space_;
   } else {
     dst = new char[needed];
   }
+
   start_ = dst;
+
+  //* 编码internalkey
+  //*                  | keylen |  key   |   tag   |
+  //*                 start   kstart              end
+  // keylen
   dst = EncodeVarint32(dst, usize + 8);
   kstart_ = dst;
+  // key
   std::memcpy(dst, user_key.data(), usize);
   dst += usize;
-  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek));
+  // tag 8bytes
+  EncodeFixed64(dst, PackSequenceAndType(s, kValueTypeForSeek)); // 查询所使用的valuetype实际上还是put
   dst += 8;
+
   end_ = dst;
 }
 

@@ -106,7 +106,7 @@ inline bool operator==(const Slice& x, const Slice& y) {
 inline bool operator!=(const Slice& x, const Slice& y) { return !(x == y); }
 
 /**
- * @brief slice的对比，实际上和memcmp的实现原理一致
+ * @brief slice的对比, 比较过程实际上和memcmp的实现原理一致
  * @param b
  * @return int
  */

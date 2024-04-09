@@ -32,6 +32,10 @@ class Slice;
 
 class LEVELDB_EXPORT WriteBatch {
  public:
+ /**
+  * @brief 提供一个接口，外部类可通过继承WriteBatch::Handler，内部实现了Iterate(Handler *)函数，可传入字类Handler进行迭代解析键值对
+  */
+  // TODO(rossetta) 2024-04-07 20:48:50 学习相关的设计模式 操作者
   class LEVELDB_EXPORT Handler {
    public:
     virtual ~Handler();
@@ -67,9 +71,18 @@ class LEVELDB_EXPORT WriteBatch {
   // This runs in O(source size) time. However, the constant factor is better
   // than calling Iterate() over the source batch with a Handler that replicates
   // the operations into this batch.
+  /**
+   * @brief 提供多个WriteBatch之间的合并功能，即对应db_impl中的BuildWriteBatchGroup
+   * @param source
+   */
   void Append(const WriteBatch& source);
 
   // Support for iterating over the contents of a batch.
+  /**
+   * @brief 提供对batch中的数据迭代解析并插入键值对到handler中的功能
+   * @param handler
+   * @return Status
+   */
   Status Iterate(Handler* handler) const;
 
  private:

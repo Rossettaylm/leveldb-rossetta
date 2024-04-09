@@ -1264,9 +1264,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
         //* writer_batch包括从w->batch 到 last_writer->batch的组合
         WriteBatch* write_batch = BuildBatchGroup(&last_writer);
 
-        //* 为write_batch设置序列号+1
+        //* 为write_batch设置序列号+1，即batch中至少一条record
         WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
 
+        //* 将sequence加上此次合并batch的record条数
         last_sequence += WriteBatchInternal::Count(write_batch);
 
         // Add to log and apply to memtable.  We can release the lock
@@ -1303,6 +1304,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
                 // The state of the log file is indeterminate: the log record we
                 // just added may or may not show up when the DB is re-opened.
                 // So we force the DB into a mode where all future writes fail.
+                //* 如果日志写发生同步错误，此时报告bg error
                 RecordBackgroundError(status);
             }
         }

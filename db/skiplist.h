@@ -114,7 +114,6 @@ class SkipList {
     //     return iter;
     // }
 
-
   private:
     enum { kMaxHeight = 12 };
 
@@ -156,7 +155,8 @@ class SkipList {
 
     // Modified only by Insert().  Read racily by readers, but stale
     // values are ok.
-    std::atomic<int> max_height_;  // Height of the entire list //* 用于维护整个skiplist的最大层高
+    std::atomic<int>
+        max_height_;  // Height of the entire list //* 用于维护整个skiplist的最大层高
 
     // Read/written only by Insert().
     Random rnd_;
@@ -218,7 +218,7 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::NewNode(
     char* const node_memory = arena_->AllocateAligned(
         sizeof(Node) + sizeof(std::atomic<Node*>) * (height - 1));
 
-        // placement new
+    // placement new
     return new (node_memory) Node(key);
 }
 
@@ -242,7 +242,7 @@ inline const Key& SkipList<Key, Comparator>::Iterator::key() const {
 template <typename Key, class Comparator>
 inline void SkipList<Key, Comparator>::Iterator::Next() {
     assert(Valid());
-    node_ = node_->Next(0); //* 最底层的下一个节点为相邻节点
+    node_ = node_->Next(0);  //* 最底层的下一个节点为相邻节点
 }
 
 template <typename Key, class Comparator>
@@ -317,7 +317,7 @@ typename SkipList<Key, Comparator>::Node*
 SkipList<Key, Comparator>::FindGreaterOrEqual(const Key& key,
                                               Node** prev) const {
     Node* x = head_;
-    int level = GetMaxHeight() - 1; // 从最高层开始遍历，共n层，level = [0, n)
+    int level = GetMaxHeight() - 1;  // 从最高层开始遍历，共n层，level = [0, n)
 
     // 从高层进行查询
     while (true) {
@@ -336,7 +336,7 @@ SkipList<Key, Comparator>::FindGreaterOrEqual(const Key& key,
 
             // step2.如果在最低层（next一定是物理上跳跃间隔为1的node），则所寻找的node就是next
             if (level == 0) {
-                return next;
+                return next;    // 返回的next是next->key >= key的位置，即查询或者待插入的位置
             } else {
                 // Switch to next list
                 // 降一层继续查找
@@ -381,7 +381,7 @@ typename SkipList<Key, Comparator>::Node* SkipList<Key, Comparator>::FindLast()
         //? 判断条件: x->next == nullptr && level == 0时到达最后一个节点
         if (next == nullptr) {
             if (level == 0) {
-                return x;   // 空列表时,x为head,此时返回head
+                return x;  // 空列表时,x为head,此时返回head
             } else {
                 // Switch to next list
                 level--;
@@ -410,7 +410,7 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
     // TODO(opt): We can use a barrier-free variant of FindGreaterOrEqual()
     // here since Insert() is externally synchronized.
     //? step1. 查找插入位置，同时需要得到新节点的每一层前驱节点，等待后续的修改
-    Node* prev[kMaxHeight]; //* 通过prev存储找到的x节点的每一层的前驱
+    Node* prev[kMaxHeight];  //* 通过prev存储找到的x节点的每一层的前驱
     Node* x = FindGreaterOrEqual(key, prev);
 
     // Our data structure does not allow duplicate insertion
@@ -418,7 +418,7 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
     assert(x == nullptr || !Equal(key, x->key));
 
     //? step2. 为新节点生成随机层高，同时维护多出的层的前驱(用head指向新节点)
-    int height = RandomHeight(); // 为当前将要插入的node生成随机层高
+    int height = RandomHeight();  // 为当前将要插入的node生成随机层高
 
     //* 如果新节点的随机层高大于了目前最大层高，则对高层的prev指向为head
     //* 维护max_height_
@@ -434,6 +434,9 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
         // immediately drop to the next level since nullptr sorts after all
         // keys.  In the latter case the reader will use the new node.
         //* max_height_在多线程环境下无须同步机制
+        //* 如果max_height的新值被观察到，则会发生两种情况：旧的层级指针head_是空；新的值已经在下面循环中被设置
+        //* 对nullptr的处理：nullptr被视为哨兵，即最大节点，此时下降一个层级进行查找，根据跳表的结构继续搜索。
+        //* 使用新节点：如果观察到max_height的新值且新的节点层级指针被设置，则使用新值来加速查找。
         max_height_.store(height, std::memory_order_relaxed);
     }
 
