@@ -24,6 +24,11 @@ namespace leveldb {
 
 class Slice;
 
+/**
+ * @brief 过滤器最终以字符串std::string的形式存放，并和数据一起存放在sstable中，在必要的时候加载到内存中，这就要求filterstring不能太大
+ * 根据将filter存放到sstable的原则设计接口，将filter序列化成字符串便于存放
+ *
+ */
 class LEVELDB_EXPORT FilterPolicy {
  public:
   virtual ~FilterPolicy();
@@ -40,6 +45,13 @@ class LEVELDB_EXPORT FilterPolicy {
   //
   // Warning: do not change the initial contents of *dst.  Instead,
   // append the newly constructed filter to *dst.
+  /**
+   * @brief 为长度为n的keys集合创建一个过滤策略，并将策略序列化成string添加到dst的后面
+   *
+   * @param keys
+   * @param n
+   * @param dst
+   */
   virtual void CreateFilter(const Slice* keys, int n,
                             std::string* dst) const = 0;
 
@@ -48,6 +60,13 @@ class LEVELDB_EXPORT FilterPolicy {
   // the key was in the list of keys passed to CreateFilter().
   // This method may return true or false if the key was not on the
   // list, but it should aim to return false with a high probability.
+  /**
+   * @brief 过滤函数接口，传入key进行过滤，如果所有的哈希函数bit都匹配上，则key可能存在于keys集合中，返回true，否则返回false
+   * @param key
+   * @param filter
+   * @return true
+   * @return false
+   */
   virtual bool KeyMayMatch(const Slice& key, const Slice& filter) const = 0;
 };
 
