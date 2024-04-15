@@ -12,18 +12,34 @@
 // restart points, and can be used to do a binary search when looking
 // for a particular key.  Values are stored as-is (without compression)
 // immediately following the corresponding key.
+
+//* data block 结构
+//* Entry 1
+//* Entry 2
+//* Entry 3
+//* ...
+//* Entry n
+//* Restart Point 1
+//* Restart Point 2
+//* ...
+//* Restart Point Length
+
 //
 // An entry for a particular key-value pair has the form:
-//     shared_bytes: varint32
-//     unshared_bytes: varint32
-//     value_length: varint32
-//     key_delta: char[unshared_bytes]
-//     value: char[value_length]
+//* Entry的内容如下所示
+//     shared_bytes: varint32              --  与前一条记录key的共享key长度
+//     unshared_bytes: varint32            --  非共享key长度
+//     value_length: varint32              --  value长度
+//     key_delta: char[unshared_bytes]     --  非共享key内容
+//     value: char[value_length]           --  value内容
 // shared_bytes == 0 for restart points.
 //
 // The trailer of the block has the form:
-//     restarts: uint32[num_restarts]
-//     num_restarts: uint32
+//* restart point的内容如下所示  -- 用于记录重新存储完整的key的点为restart point
+//     restarts: uint32[num_restarts]      --  重启点的数组，每个重启点为一个uint32的偏移量
+
+//* restart point length的内容如下所示
+//     num_restarts: uint32                --  重启点数组的长度
 // restarts[i] contains the offset within the block of the ith restart point.
 
 #include "table/block_builder.h"
@@ -74,7 +90,10 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   assert(counter_ <= options_->block_restart_interval);
   assert(buffer_.empty()  // No values yet?
          || options_->comparator->Compare(key, last_key_piece) > 0);
-  size_t shared = 0;
+
+  size_t shared = 0;    // 记录last_key和key的共享长度
+
+  //* 1. 如果未到达重启点，则与last_key进行比较，进行差分编码；否则记录重启点并重新开始key
   if (counter_ < options_->block_restart_interval) {
     // See how much sharing to do with previous string
     const size_t min_length = std::min(last_key_piece.size(), key.size());
@@ -89,6 +108,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   const size_t non_shared = key.size() - shared;
 
   // Add "<shared><non_shared><value_size>" to buffer_
+  //* 2. 进行差分编码
   PutVarint32(&buffer_, shared);
   PutVarint32(&buffer_, non_shared);
   PutVarint32(&buffer_, value.size());
@@ -98,6 +118,7 @@ void BlockBuilder::Add(const Slice& key, const Slice& value) {
   buffer_.append(value.data(), value.size());
 
   // Update state
+  //* 3. 更新last_key并且更新重启点counter计数
   last_key_.resize(shared);
   last_key_.append(key.data() + shared, non_shared);
   assert(Slice(last_key_) == key);

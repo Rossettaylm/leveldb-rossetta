@@ -15,38 +15,38 @@ namespace leveldb {
 struct Options;
 
 class BlockBuilder {
- public:
-  explicit BlockBuilder(const Options* options);
+  public:
+    explicit BlockBuilder(const Options* options);
 
-  BlockBuilder(const BlockBuilder&) = delete;
-  BlockBuilder& operator=(const BlockBuilder&) = delete;
+    BlockBuilder(const BlockBuilder&) = delete;
+    BlockBuilder& operator=(const BlockBuilder&) = delete;
 
-  // Reset the contents as if the BlockBuilder was just constructed.
-  void Reset();
+    // Reset the contents as if the BlockBuilder was just constructed.
+    void Reset();
 
-  // REQUIRES: Finish() has not been called since the last call to Reset().
-  // REQUIRES: key is larger than any previously added key
-  void Add(const Slice& key, const Slice& value);
+    // REQUIRES: Finish() has not been called since the last call to Reset().
+    // REQUIRES: key is larger than any previously added key
+    void Add(const Slice& key, const Slice& value);
 
-  // Finish building the block and return a slice that refers to the
-  // block contents.  The returned slice will remain valid for the
-  // lifetime of this builder or until Reset() is called.
-  Slice Finish();
+    // Finish building the block and return a slice that refers to the
+    // block contents.  The returned slice will remain valid for the
+    // lifetime of this builder or until Reset() is called.
+    Slice Finish();
 
-  // Returns an estimate of the current (uncompressed) size of the block
-  // we are building.
-  size_t CurrentSizeEstimate() const;
+    // Returns an estimate of the current (uncompressed) size of the block
+    // we are building.
+    size_t CurrentSizeEstimate() const;
 
-  // Return true iff no entries have been added since the last Reset()
-  bool empty() const { return buffer_.empty(); }
+    // Return true iff no entries have been added since the last Reset()
+    bool empty() const { return buffer_.empty(); }
 
- private:
-  const Options* options_;
-  std::string buffer_;              // Destination buffer
-  std::vector<uint32_t> restarts_;  // Restart points
-  int counter_;                     // Number of entries emitted since restart
-  bool finished_;                   // Has Finish() been called?
-  std::string last_key_;
+  private:
+    const Options* options_;
+    std::string buffer_;  // Destination buffer 记录最终data block的序列化结果
+    std::vector<uint32_t> restarts_;  // Restart points 记录重启点的偏移量
+    int counter_;  // Number of entries emitted since restart 记录从上一个重启点开始的Entry数量
+    bool finished_;  // Has Finish() been called?
+    std::string last_key_;  // 记录上一次add的key值，用于进行差分编码Entry
 };
 
 }  // namespace leveldb

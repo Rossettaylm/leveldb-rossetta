@@ -25,6 +25,8 @@ FilterBlockBuilder::FilterBlockBuilder(const FilterPolicy* policy)
 void FilterBlockBuilder::StartBlock(uint64_t block_offset) {
     uint64_t filter_index = (block_offset / kFilterBase);
     assert(filter_index >= filter_offsets_.size());
+
+    //* filter是按照kFilterBase大小来存放过滤器数据的，而传入的block_offset可能每次增加的内容由预设的options.block_size大小和添加的keys长度决定。此时需要根据根据filter_index循环添加filter data
     while (filter_index > filter_offsets_.size()) {
         GenerateFilter();
     }
