@@ -11,6 +11,10 @@ Iterator::Iterator() {
   cleanup_head_.next = nullptr;
 }
 
+/**
+ * @brief Iterator的默认析构函数，遍历所有的CleanupNode节点，每个节点代表了注册的一个CleanupFunction操作
+ *
+ */
 Iterator::~Iterator() {
   if (!cleanup_head_.IsEmpty()) {
     cleanup_head_.Run();
@@ -23,6 +27,12 @@ Iterator::~Iterator() {
   }
 }
 
+/**
+ * @brief 注册一个CleanupFunction操作，即生成一个Cleanup节点
+ * @param func
+ * @param arg1
+ * @param arg2
+ */
 void Iterator::RegisterCleanup(CleanupFunction func, void* arg1, void* arg2) {
   assert(func != nullptr);
   CleanupNode* node;

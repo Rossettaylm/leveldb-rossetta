@@ -29,6 +29,18 @@ class WritableFile;
  * @brief 用于构建sstable
  *
  */
+
+//* data block 1    --
+//* data block 2    --
+//* data block 3    --> 数据部分
+//* data block 4    --
+//* data block 5    --
+//* filter block    --> 元数据部分
+//* meta index block --> 元数据的索引 filtername + filter block handle
+//* index block     --> 数据的索引 entry: maxkey + data block handle
+//* footer          --> 索引的索引 meta index block handle + index block handle
+//? blockhandle的复用：对于索引block，其entry的value部分都是复用了blockhandle进行数据block的定位
+
 class LEVELDB_EXPORT TableBuilder {
   public:
     // Create a builder that will store the contents of the table it is
@@ -53,12 +65,21 @@ class LEVELDB_EXPORT TableBuilder {
     // Add key,value to the table being constructed.
     // REQUIRES: key is after any previously added key according to comparator.
     // REQUIRES: Finish(), Abandon() have not been called
+    /**
+     * @brief 通过add按递增序将键值对写入到sstable中的data block中,如果超过了设定的options.block_size,则调用Flush()
+     *
+     * @param key
+     * @param value
+     */
     void Add(const Slice& key, const Slice& value);
 
     // Advanced operation: flush any buffered key/value pairs to file.
     // Can be used to ensure that two adjacent entries never live in
     // the same data block.  Most clients should not need to use this method.
     // REQUIRES: Finish(), Abandon() have not been called
+    /**
+     * @brief 将data_block的内容flush到文件中,并更新对应的index_entry和filter block
+     */
     void Flush();
 
     // Return non-ok iff some error has been detected.
@@ -67,6 +88,10 @@ class LEVELDB_EXPORT TableBuilder {
     // Finish building the table.  Stops using the file passed to the
     // constructor after this function returns.
     // REQUIRES: Finish(), Abandon() have not been called
+    /**
+     * @brief 将除data block外的元数据块写入到sstable中,完成一个sstable
+     * @return Status
+     */
     Status Finish();
 
     // Indicate that the contents of this builder should be abandoned.  Stops

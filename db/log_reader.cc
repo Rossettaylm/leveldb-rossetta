@@ -92,7 +92,7 @@ bool Reader::ReadRecord(Slice* record, std::string* scratch) {
     uint64_t prospective_record_offset = 0;
 
     Slice fragment;
-    //! 循环读取，每次读取一条chunk，根据其type存入scratch中，最终组成一条record放入result中
+    //! 循环读取，每次读取一条chunk/fragment，根据其type存入scratch中，最终组成一条record放入result中
     while (true) {
         // 读取一条chunk，并获取type
         const unsigned int record_type = ReadPhysicalRecord(&fragment);

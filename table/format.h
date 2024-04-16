@@ -23,11 +23,15 @@ struct ReadOptions;
 /**
  * @brief BlockHandle是用于指向文件中data block和metadata block的信息的指针，包含offset和length信息
  *
+ * 即通过offset 和 length可以确定文件中的block所处的位置
+ //? 值得注意的是: index block中一条entry的value部分由offset和length组成，可以视作为data block handle
+ //? meta index block中仅包含一条键值对，指示filter block信息。其value由offset和length组成，可以视作为filter block handle
+ //? footer中包含了index block handle和metaindex block handle
  */
 class BlockHandle {
   public:
     // Maximum encoding length of a BlockHandle
-    enum { kMaxEncodedLength = 10 + 10 };
+    enum { kMaxEncodedLength = 10 + 10 };  // variant64最多需要10个字节进行编码
 
     BlockHandle();
 

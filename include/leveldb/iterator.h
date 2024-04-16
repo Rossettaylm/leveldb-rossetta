@@ -78,11 +78,15 @@ class LEVELDB_EXPORT Iterator {
   // Note that unlike all of the preceding methods, this method is
   // not abstract and therefore clients should not override it.
   using CleanupFunction = void (*)(void* arg1, void* arg2);
+  //? 每次注册一个Cleanup操作，等于生成了一个CleanupNode，在Iterator析构时对单链表依次执行
   void RegisterCleanup(CleanupFunction function, void* arg1, void* arg2);
 
  private:
   // Cleanup functions are stored in a single-linked list.
   // The list's head node is inlined in the iterator.
+  /**
+   * @brief 用单链表的形式来存储Cleanup操作，即CleanupFunction
+   */
   struct CleanupNode {
     // True if the node is not used. Only head nodes might be unused.
     bool IsEmpty() const { return function == nullptr; }
@@ -98,7 +102,7 @@ class LEVELDB_EXPORT Iterator {
     void* arg2;
     CleanupNode* next;
   };
-  CleanupNode cleanup_head_;
+  CleanupNode cleanup_head_;    // 内置的Cleanu操作
 };
 
 // Return an empty iterator (yields nothing).

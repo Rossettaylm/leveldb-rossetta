@@ -23,6 +23,21 @@ class TableCache;
 // A Table is a sorted map from strings to strings.  Tables are
 // immutable and persistent.  A Table may be safely accessed from
 // multiple threads without external synchronization.
+/**
+ * @brief table是一个有序的map<string, string>，且不可变和持久化的，一个table可以被多线程安全访问而不需要同步机制
+ *
+ */
+
+//* data block 1    --
+//* data block 2    --
+//* data block 3    --> 数据部分
+//* data block 4    --
+//* data block 5    --
+//* filter block    --> 元数据部分
+//* meta index block --> 元数据的索引 filtername + filter block handle
+//* index block     --> 数据的索引 entry: maxkey + data block handle
+//* footer          --> 索引的索引 meta index block handle + index block handle
+
 class LEVELDB_EXPORT Table {
   public:
     // Attempt to open the table that is stored in bytes [0..file_size)
@@ -69,6 +84,14 @@ class LEVELDB_EXPORT Table {
     // Calls (*handle_result)(arg, ...) with the entry found after a call
     // to Seek(key).  May not make such a call if filter policy says
     // that key is not present.
+    /**
+     * @brief 调用handle_result来处理block内部通过seek得到的entry
+     *
+     * @param key
+     * @param arg
+     * @param handle_result
+     * @return Status
+     */
     Status InternalGet(const ReadOptions&, const Slice& key, void* arg,
                        void (*handle_result)(void* arg, const Slice& k,
                                              const Slice& v));

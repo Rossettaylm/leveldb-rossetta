@@ -218,6 +218,7 @@ void TableBuilder::WriteBlock(BlockBuilder* block, BlockHandle* handle) {
 void TableBuilder::WriteRawBlock(const Slice& block_contents,
                                  CompressionType type, BlockHandle* handle) {
     Rep* r = rep_;
+    // 在实际写入的时候才进行设置blockhandle信息
     handle->set_offset(r->offset);
     handle->set_size(block_contents.size());
     r->status = r->file->Append(block_contents);
@@ -243,6 +244,10 @@ Status TableBuilder::status() const { return rep_->status; }
 /**
  * @brief 完成整个sstable的写入
  * 对于只有一个block的管理数据，在最后进行写入
+ * //? 值得注意的是：index block和meta index block复用了data block的BlockBuilder的接口
+ * //? 因此index block和meta index block也具有restart point array和restart point length
+ * //? index block通过在初始化设置opt.index_block_options = 1来保证不进行差分编码，有几个entry则restart point array的长度就为多少
+ * //? meta index block则是只有一条关于filter block的记录，也仅有一个restart point array信息
  *
  * @return Status
  */
@@ -264,7 +269,7 @@ Status TableBuilder::Finish() {
 
     //* 2. Write metaindex block
     if (ok()) {
-        // 记录filter block的信息并写入
+        // 生成仅包含一个键值对的metaindex block用于指示filter block
         BlockBuilder meta_index_block(&r->options);
         if (r->filter_block != nullptr) {
             // Add mapping from "filter.Name" to location of filter data
