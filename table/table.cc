@@ -200,35 +200,41 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
     Block* block = nullptr;
     Cache::Handle* cache_handle = nullptr;
 
+    //* step1. 从index_value中解码得到block handle
     BlockHandle handle;
     Slice input = index_value;
     Status s = handle.DecodeFrom(&input);
     // We intentionally allow extra stuff in index_value so that we
     // can add more features in the future.
 
+    //* step2. 分情况决定从cache中还是文件中读取block的内容
     if (s.ok()) {
         BlockContents contents;
         if (block_cache != nullptr) {
+            //* 情况1：存在LRUcache的情况下，从cache中查询block的内容（cache中一个entry以data block为单位进行存放）
             char cache_key_buffer[16];
             EncodeFixed64(cache_key_buffer, table->rep_->cache_id);
-            EncodeFixed64(cache_key_buffer + 8, handle.offset());
+            EncodeFixed64(cache_key_buffer + 8, handle.offset());       // cache key: | cache_id 8bytes | block handle offset 8bytes |
             Slice key(cache_key_buffer, sizeof(cache_key_buffer));
-            cache_handle = block_cache->Lookup(key);
+            cache_handle = block_cache->Lookup(key);        // cache查询
             if (cache_handle != nullptr) {
+                // cache命中，从cache中获取block的内容
                 block =
                     reinterpret_cast<Block*>(block_cache->Value(cache_handle));
             } else {
+                // cache未命中，直接从文件中读取
                 s = ReadBlock(table->rep_->file, options, handle, &contents);
                 if (s.ok()) {
-                    block = new Block(contents);
+                    block = new Block(contents);    // 分配block对象进行内容管理
+                    // 将block插入到cache中，方便下次读取
                     if (contents.cachable && options.fill_cache) {
                         cache_handle = block_cache->Insert(
-                            key, block, block->size(), &DeleteCachedBlock);
+                            key, block, block->size(), &DeleteCachedBlock); // DeleleCacheBlock作为cache entry的删除器，在从cache中删除entry时，需要对block对象释放
                     }
                 }
             }
         } else {
-            // 没有使用cache，从file中读取一个block
+            //* 情况2：没有使用cache，从file中读取一个block
             s = ReadBlock(table->rep_->file, options, handle, &contents);
             if (s.ok()) {
                 block = new Block(contents);
@@ -236,6 +242,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
         }
     }
 
+    //* step3. 返回对block进行访问的迭代器
     Iterator* iter;
     if (block != nullptr) {
         iter = block->NewIterator(table->rep_->options.comparator);
@@ -243,6 +250,7 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
             // 在iter析构时，同时执行DeleteBlock函数
             iter->RegisterCleanup(&DeleteBlock, block, nullptr);
         } else {
+            // 如果有cache存在，通过LRUHandle的deleter进行block的释放
             iter->RegisterCleanup(&ReleaseBlock, block_cache, cache_handle);
         }
     } else {

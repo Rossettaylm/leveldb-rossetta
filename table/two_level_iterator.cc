@@ -14,7 +14,7 @@ namespace leveldb {
 namespace {
 
 // typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
-using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
+// using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
 
 class TwoLevelIterator : public Iterator {
   public:
@@ -59,7 +59,7 @@ class TwoLevelIterator : public Iterator {
     void InitDataBlock();
 
     BlockFunction block_function_;
-    void* arg_;
+    void* arg_;     // Table *
     const ReadOptions options_;
     Status status_;
     IteratorWrapper index_iter_;
