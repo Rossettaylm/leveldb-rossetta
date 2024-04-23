@@ -169,7 +169,7 @@ class DBImpl : public DB {
     const std::string dbname_;
 
     // table_cache_ provides its own synchronization
-    TableCache* const table_cache_;
+    TableCache* const table_cache_;     // sstable cache, 用于执行对数据库的读操作
 
     // Lock over the persistent DB state.  Non-null iff successfully acquired.
     FileLock* db_lock_;
@@ -189,7 +189,7 @@ class DBImpl : public DB {
 
     // Queue of writers.
     //!通过代码注解（annotations ）告诉编译器哪些成员变量和成员函数是受哪个 mutex 保护，这样如果忘记了加锁，编译器会给警告
-    std::deque<Writer*> writers_ GUARDED_BY(mutex_);
+    std::deque<Writer*> writers_ GUARDED_BY(mutex_);    // 多线程 writter 队列
     WriteBatch* tmp_batch_ GUARDED_BY(mutex_);
 
     SnapshotList snapshots_ GUARDED_BY(mutex_);

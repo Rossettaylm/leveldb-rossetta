@@ -28,6 +28,7 @@ class MemTable {
   public:
     // MemTables are reference counted.  The initial reference count
     // is zero and the caller must call Ref() at least once.
+    //! 调用者需要通过Ref()和Unref()接口来使用memtable
     /**
      * @brief 通过InternalKeyComparator来构造一个MemTable
      *
