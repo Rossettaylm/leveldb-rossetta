@@ -25,7 +25,9 @@ void trans(const int * array, int n) {
 int main(int argc, char** argv) {
     vector<int> values{3, 5, 3, 3, 10, 100, 0};
 
-    trans(&values[0], values.size());
+    // trans(&values[0], values.size());
+    int *pvalue = nullptr;
+    delete pvalue;
 
     return 0;
 }

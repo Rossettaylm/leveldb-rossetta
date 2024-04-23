@@ -71,6 +71,7 @@ class LEVELDB_EXPORT Table {
     // bytes, and so includes effects like compression of the underlying data.
     // E.g., the approximate offset of the last key in the table will
     // be close to the file length.
+    //* 给定一个key值，计算其在sstable文件中的大概偏移量
     uint64_t ApproximateOffsetOf(const Slice& key) const;
 
   private:

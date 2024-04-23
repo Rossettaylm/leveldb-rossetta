@@ -13,6 +13,7 @@ struct ReadOptions;
 
 using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
 
+//! 通过二级迭代器来访问sstable
 // Return a new two level iterator.  A two-level iterator contains an
 // index iterator whose values point to a sequence of blocks where
 // each block is itself a sequence of key,value pairs.  The returned
@@ -29,6 +30,8 @@ using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
 
 /**
  * @brief 生成一个二级迭代器
+ * //? 同样是为了隐藏实现细节，用NewTwoLevelIterator()替代new TwoLevelIterator()
+ * //? 将TwoLevelIterator的实现放入cpp文件中
  *
  * @param index_iter : Iterator* index iterator,由index block得到
  * @param block_function : 通过index_entry的index_value来解析并得到data block iterator的函数指针

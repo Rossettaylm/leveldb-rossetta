@@ -187,6 +187,7 @@ static void ReleaseBlock(void* arg, void* h) {
 // into an iterator over the contents of the corresponding block.
 /**
  * @brief 通过blockhandle或者index entry value来读取data block的内容，并返回一个可以遍历这个block的迭代器
+ * //! 提供直接从文件中读取block内容或者从cache中读取block内容
  *
  * @param arg : void* Table*对象
  * @param options : const ReadOptions& 读取选项
@@ -242,7 +243,8 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options,
         }
     }
 
-    //* step3. 返回对block进行访问的迭代器
+    //* step3. 返回对block进行访问的迭代器，并注册iter的cleanup操作（删除Block对象或者释放Block对象）
+    //! 值得注意的是：由返回的Block::iter对Block进行唯一访问，在使用者销毁iter时，同时需要负责对new的Block对象也进行销毁，通过回调函数(RegisterCleanup)的方式进行实现
     Iterator* iter;
     if (block != nullptr) {
         iter = block->NewIterator(table->rep_->options.comparator);
@@ -317,6 +319,12 @@ Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,
     return s;
 }
 
+/**
+ * @brief 查询key值在sstable file中的大概偏移字节量
+ *
+ * @param key
+ * @return uint64_t
+ */
 uint64_t Table::ApproximateOffsetOf(const Slice& key) const {
     Iterator* index_iter =
         rep_->index_block->NewIterator(rep_->options.comparator);

@@ -16,8 +16,21 @@ namespace {
 // typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&);
 // using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
 
+/**
+ * @brief 二级访问迭代器的实现方式：先通过index_iter查询所需要的key在data block序列中的位置，由BlockFunction提供的机制得到一个Block::iter，由此进行data block数据的遍历，
+ * 注意需要在每次seek或者next/prev的时候注意是否跨越了data block的边界情况
+ *
+ */
 class TwoLevelIterator : public Iterator {
   public:
+    /**
+    * @brief 构造一个二级迭代器用于遍历sstable的data blocks
+    *
+    * @param index_iter index block iterator
+    * @param block_function 生成block_iterator的函数
+    * @param arg : Table* 即sstable对象
+    * @param options : ReadOptions 读取选项
+    */
     TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,
                      void* arg, const ReadOptions& options);
 
@@ -53,13 +66,19 @@ class TwoLevelIterator : public Iterator {
     void SaveError(const Status& s) {
         if (status_.ok() && !s.ok()) status_ = s;
     }
+
+    //* 用于two level iterator在不同的data block之间进行移动
     void SkipEmptyDataBlocksForward();
     void SkipEmptyDataBlocksBackward();
+
+    //* 为two level iterator设置新的data block iterator
     void SetDataIterator(Iterator* data_iter);
+
+    //* 根据index iter的key值来初始化一个data block iterator
     void InitDataBlock();
 
     BlockFunction block_function_;
-    void* arg_;     // Table *
+    void* arg_;  // Table *
     const ReadOptions options_;
     Status status_;
     IteratorWrapper index_iter_;
@@ -113,6 +132,10 @@ void TwoLevelIterator::Prev() {
     SkipEmptyDataBlocksBackward();
 }
 
+/**
+ * @brief 当data iter为空或者已经超出data block范围时(!data_iter_.valid())，跳到下一个data block中
+ *
+ */
 void TwoLevelIterator::SkipEmptyDataBlocksForward() {
     while (data_iter_.iter() == nullptr || !data_iter_.Valid()) {
         // Move to next block
@@ -126,6 +149,10 @@ void TwoLevelIterator::SkipEmptyDataBlocksForward() {
     }
 }
 
+/**
+ * @brief 当data iter为空或者已经超出data block范围时(!data_iter_.valid())，跳到上一个data block中
+ *
+ */
 void TwoLevelIterator::SkipEmptyDataBlocksBackward() {
     while (data_iter_.iter() == nullptr || !data_iter_.Valid()) {
         // Move to next block
@@ -139,24 +166,33 @@ void TwoLevelIterator::SkipEmptyDataBlocksBackward() {
     }
 }
 
+/**
+ * @brief 设置data iterator，需要保证旧的data iterator为空
+ *
+ * @param data_iter
+ */
 void TwoLevelIterator::SetDataIterator(Iterator* data_iter) {
     if (data_iter_.iter() != nullptr) SaveError(data_iter_.status());
     data_iter_.Set(data_iter);
 }
 
 void TwoLevelIterator::InitDataBlock() {
+    //* 在index iter中没有查询到对应的key，则将data iter设置为nullptr
     if (!index_iter_.Valid()) {
         SetDataIterator(nullptr);
     } else {
         Slice handle = index_iter_.value();
         if (data_iter_.iter() != nullptr &&
             handle.compare(data_block_handle_) == 0) {
+            //* data iter已经由此handle构造过了，不需要再进行重新构造
             // data_iter_ is already constructed with this iterator, so
             // no need to change anything
         } else {
+            //* 构造一个新的data iter指向所需要查询的data block
             Iterator* iter = (*block_function_)(arg_, options_, handle);
-            data_block_handle_.assign(handle.data(), handle.size());
-            SetDataIterator(iter);
+            data_block_handle_.assign(handle.data(),
+                                      handle.size());  // 更新data block handle
+            SetDataIterator(iter);                     // 设置data iter
         }
     }
 }
