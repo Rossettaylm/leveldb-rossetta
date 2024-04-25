@@ -9,13 +9,13 @@
 // -------------
 //
 // Writes require external synchronization, most likely a mutex.
-// * 读需要外部的同步机制，如mutex互斥锁，防止同时对skiplist进行修改
+// * 写需要外部的同步机制，如mutex互斥锁，防止同时对skiplist进行修改
 // Reads require a guarantee that the SkipList will not be destroyed
 // while the read is in progress.  Apart from that, reads progress
 // without any internal locking or synchronization.
 // * 读操作需要保证读进程运行时skiplist不被销毁；同时读取操作本身不需要内部的锁或者同步机制
 //
-// Invariants: // * 不变性
+// Invariants: // * 不变性 -- 跳表不提供删除接口，即不删除跳表节点，而是通过插入type == delete的节点进行删除
 //
 // (1) Allocated nodes are never deleted until the SkipList is
 // destroyed.  This is trivially guaranteed by the code since we
@@ -156,7 +156,7 @@ class SkipList {
     // Modified only by Insert().  Read racily by readers, but stale
     // values are ok.
     std::atomic<int>
-        max_height_;  // Height of the entire list //* 用于维护整个skiplist的最大层高
+        max_height_;  // Height of the entire list //* 用于多线程维护整个skiplist的最大层高
 
     // Read/written only by Insert().
     Random rnd_;
@@ -176,6 +176,7 @@ struct SkipList<Key, Comparator>::Node {
 
     // Accessors/mutators for links.  Wrapped in methods so we can
     // add the appropriate barriers as necessary.
+    //! 通过原子变量和内存屏障的方式实现了无锁队列
     Node* Next(int n) {
         assert(n >= 0);
         // Use an 'acquire load' so that we observe a fully initialized
@@ -330,7 +331,7 @@ SkipList<Key, Comparator>::FindGreaterOrEqual(const Key& key,
             // Keep searching in this list
             x = next;
         } else {
-            //* 找到了大于等于key的节点，即next节点
+            //* key <= next->key 或者 next == nullptr
             // step1.如果有prev传进来，则维护prev数组
             if (prev != nullptr) prev[level] = x;
 
@@ -414,7 +415,8 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
     Node* x = FindGreaterOrEqual(key, prev);
 
     // Our data structure does not allow duplicate insertion
-    //* 不允许存在同样的key
+    // 此时x为key的待插入位置，x == nullptr时，插入队列的末尾; 跳表不允许插入同样的key
+    //* 由于internal key的编码带有sequence number和type，所以同样的user key回产生不同的internal key，保证了跳表中没有相同的key值
     assert(x == nullptr || !Equal(key, x->key));
 
     //? step2. 为新节点生成随机层高，同时维护多出的层的前驱(用head指向新节点)
@@ -448,8 +450,9 @@ void SkipList<Key, Comparator>::Insert(const Key& key) {
         //? 不保证操作的即使可见性，其余线程可能不能立即看见这个变化
         x->NoBarrier_SetNext(i, prev[i]->NoBarrier_Next(i));
 
+        //? 此时相当于将x插入了跳表中，需要使用内存屏障
         //? 添加一个内存屏障，保证更新next指针完成前，所有之前的内存写入操作对于后续都是可见的，即新节点的插入对于所有线程是可见的
-        prev[i]->SetNext(i, x);
+        prev[i]->SetNext(i, x); // prev[i]至少是head_节点
     }
 }
 

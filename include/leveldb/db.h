@@ -28,7 +28,7 @@ class WriteBatch;
 // accessed from multiple threads without any external synchronization.
 class LEVELDB_EXPORT Snapshot {
  protected:
-  virtual ~Snapshot();
+  virtual ~Snapshot();  // TODO(rossetta) 2024-04-24 14:31:44 将析构函数设置为protected，即Snapshot本身不负责析构，而是交给SnapshotList友元，学习此设计模式
 };
 
 // A range of keys

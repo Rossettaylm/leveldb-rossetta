@@ -39,6 +39,10 @@ namespace leveldb {
 const int kNumNonTableCacheFiles = 10;
 
 // Information kept for every waiting writer
+/**
+ * @brief writer对象负责一个线程的一次write操作
+ *
+ */
 struct DBImpl::Writer {
     explicit Writer(port::Mutex* mu)
         : batch(nullptr), sync(false), done(false), cv(mu) {}
@@ -47,7 +51,7 @@ struct DBImpl::Writer {
     WriteBatch* batch;
     bool sync;
     bool done;
-    port::CondVar cv;
+    port::CondVar cv;  // 用于通知或等待其他线程的cv
 };
 
 struct DBImpl::CompactionState {
@@ -90,17 +94,33 @@ static void ClipToRange(T* ptr, V minvalue, V maxvalue) {
     if (static_cast<V>(*ptr) > maxvalue) *ptr = maxvalue;
     if (static_cast<V>(*ptr) < minvalue) *ptr = minvalue;
 }
+
+/**
+ * @brief 净化Options，使其符合标准，保证用户设定的Options不超出限制
+ *
+ * @param dbname
+ * @param icmp
+ * @param ipolicy
+ * @param src
+ * @return Options
+ */
 Options SanitizeOptions(const std::string& dbname,
                         const InternalKeyComparator* icmp,
                         const InternalFilterPolicy* ipolicy,
                         const Options& src) {
     Options result = src;
-    result.comparator = icmp;
-    result.filter_policy = (src.filter_policy != nullptr) ? ipolicy : nullptr;
+    result.comparator = icmp;  // 设置comparator
+    result.filter_policy = (src.filter_policy != nullptr)
+                               ? ipolicy
+                               : nullptr;  // 设置filter_policy
+
+    // 设置相应的size范围
     ClipToRange(&result.max_open_files, 64 + kNumNonTableCacheFiles, 50000);
     ClipToRange(&result.write_buffer_size, 64 << 10, 1 << 30);
     ClipToRange(&result.max_file_size, 1 << 20, 1 << 30);
     ClipToRange(&result.block_size, 1 << 10, 4 << 20);
+
+    // 创建info logger文件
     if (result.info_log == nullptr) {
         // Open a log file in the same directory as the db
         src.env->CreateDir(dbname);  // In case it does not exist
@@ -113,15 +133,19 @@ Options SanitizeOptions(const std::string& dbname,
             result.info_log = nullptr;
         }
     }
+
+    // 创建block cache
     if (result.block_cache == nullptr) {
-        result.block_cache = NewLRUCache(8 << 20);
+        result.block_cache = NewLRUCache(8 << 20);  // 8MB
     }
+
     return result;
 }
 
 static int TableCacheSize(const Options& sanitized_options) {
     // Reserve ten files or so for other uses and give the rest to TableCache.
-    return sanitized_options.max_open_files - kNumNonTableCacheFiles;
+    return sanitized_options.max_open_files -
+           kNumNonTableCacheFiles;  // 留下10个文件作为他用，其余的放入tablecache中，即tablecache.size()
 }
 
 DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
@@ -153,7 +177,10 @@ DBImpl::DBImpl(const Options& raw_options, const std::string& dbname)
 DBImpl::~DBImpl() {
     // Wait for background work to finish.
     mutex_.Lock();
-    shutting_down_.store(true, std::memory_order_release);
+    //* step1. 设置db关闭标志
+    shutting_down_.store(
+        true, std::memory_order_release);  // 保证写操作对后续的指令是可见的
+    //* step2. 等待后台任务完成
     while (background_compaction_scheduled_) {
         background_work_finished_signal_.Wait();
     }
@@ -508,21 +535,33 @@ Status DBImpl::RecoverLogFile(uint64_t log_number, bool last_log,
     return status;
 }
 
+/**
+ * @brief 将内存数据库memtable转化为Level0的sstable，选择一个合适的level，并记录compaction 信息
+ *
+ * @param mem
+ * @param edit
+ * @param base
+ * @return Status
+ */
 Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
+    //* step1. 预处理，写入sstable前的准备工作
     mutex_.AssertHeld();
-    const uint64_t start_micros = env_->NowMicros();
+    const uint64_t start_micros = env_->NowMicros();    // 记录开始时间
     FileMetaData meta;
-    meta.number = versions_->NewFileNumber();
-    pending_outputs_.insert(meta.number);
+    meta.number = versions_->NewFileNumber();       // 生成新的文件编号
+    pending_outputs_.insert(meta.number);       // 将当前文件编号加入等待输出的队列中
+
     Iterator* iter = mem->NewIterator();
     Log(options_.info_log, "Level-0 table #%llu: started",
-        (unsigned long long)meta.number);
+        (unsigned long long)meta.number);       // 打印日志
 
     Status s;
     {
         mutex_.Unlock();
-        s = BuildTable(dbname_, env_, options_, table_cache_, iter, &meta);
+        //* step2. 写入sstable：在当前db中遍历imm iter并构建一个0 level的sstable，存储相应的文件信息到meta中
+        s = BuildTable(dbname_, env_, options_, table_cache_, iter,
+                       &meta);  // 持久化memtable到sstable时不需要加锁?
         mutex_.Lock();
     }
 
@@ -536,18 +575,21 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
     // should not be added to the manifest.
     int level = 0;
     if (s.ok() && meta.file_size > 0) {
+        //* step3. 后处理：如果写入0 level文件成功，则根据其最大key和最小key选择一个合适的level
         const Slice min_user_key = meta.smallest.user_key();
         const Slice max_user_key = meta.largest.user_key();
         if (base != nullptr) {
             level =
                 base->PickLevelForMemTableOutput(min_user_key, max_user_key);
         }
+        //* 将sstable文件信息存储到VersionEdit对象中
         edit->AddFile(level, meta.number, meta.file_size, meta.smallest,
                       meta.largest);
     }
 
+    //* step4. 记录compaction状态
     CompactionStats stats;
-    stats.micros = env_->NowMicros() - start_micros;
+    stats.micros = env_->NowMicros() - start_micros;      // 记录当前compaction所花费的微秒数
     stats.bytes_written = meta.file_size;
     stats_[level].Add(stats);
     return s;
@@ -558,6 +600,7 @@ void DBImpl::CompactMemTable() {
     assert(imm_ != nullptr);
 
     // Save the contents of the memtable as a new Table
+    //* step1. 压缩imm，进行minor compaction，并记录相应的信息到compactionStats和versionEdit中
     VersionEdit edit;
     Version* base = versions_->current();
     base->Ref();
@@ -577,6 +620,7 @@ void DBImpl::CompactMemTable() {
 
     if (s.ok()) {
         // Commit to the new state
+        //* 将imm置为空
         imm_->Unref();
         imm_ = nullptr;
         has_imm_.store(false, std::memory_order_release);
@@ -696,6 +740,8 @@ void DBImpl::BackgroundCall() {
     } else if (!bg_error_.ok()) {
         // No more background work after a background error.
     } else {
+        //* 进行compaction
+        //* 全程通过mutex进行保护
         BackgroundCompaction();
     }
 
@@ -703,7 +749,10 @@ void DBImpl::BackgroundCall() {
 
     // Previous compaction may have produced too many files in a level,
     // so reschedule another compaction if needed.
+    //* 先前的compaction可能造成一个level中存在太多的文件，如果是则重新调度compactionn
     MaybeScheduleCompaction();
+
+    //* 通知所有等待后台任务的条件变量
     background_work_finished_signal_.SignalAll();
 }
 
@@ -1126,6 +1175,14 @@ int64_t DBImpl::TEST_MaxNextLevelOverlappingBytes() {
     return versions_->MaxNextLevelOverlappingBytes();
 }
 
+/**
+ * @brief 从数据库中获取查询的键值对，查询顺序: mem -> imm -> sstable
+ *
+ * @param options
+ * @param key
+ * @param value
+ * @return Status
+ */
 Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
     Status s;
@@ -1232,6 +1289,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     w.sync = options.sync;  // 写入模式：同步/异步
     w.done = false;
 
+    //========== 临界区 begin ==========
     MutexLock l(&mutex_);  //? 类似于thread_guard，进行加锁保护
 
     writers_.push_back(&w);  // 将当前写入writer放入等待队列中
@@ -1240,8 +1298,10 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     //! w.done在合并操作时会被置为true，即被其他线程执行完
     while (!w.done && &w != writers_.front()) {
         // wait解锁并进行等待signal，在这段时间里，writers_队列可能添加进新的元素
+        //========== 临界区 end ==========
         w.cv.Wait();  // writer和MutexLock用的是同一个互斥锁，其中writer的cond使用adopt_lock的形式，防止重复加锁
     }
+    //========== 临界区 begin ==========
 
     //* 情况1. 所加入的writer被其他线程处理了，返回其处理结果status
     //* 情况2. 所加入的writer到达队头，进行后续处理
@@ -1264,7 +1324,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
         //* writer_batch包括从w->batch 到 last_writer->batch的组合
         WriteBatch* write_batch = BuildBatchGroup(&last_writer);
 
-        //* 为write_batch设置序列号+1，即batch中至少一条record
+        //* 为合并后的write_batch设置序列号+1，即batch中至少一条record
+        //? 一个writebatch内的所有操作共享一个版本号sequence number
         WriteBatchInternal::SetSequence(write_batch, last_sequence + 1);
 
         //* 将sequence加上此次合并batch的record条数
@@ -1276,6 +1337,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
         // into mem_.
         //? 进行日志的写入logging和内存表的写入apply to memtable
         //? 此时对于log和memtable的写入，Writer对象已经持有了必要的锁，所以不需要mutex_进行保护
+        //========== 临界区 end ==========
         {
             //* step1. 解锁
             mutex_.Unlock();
@@ -1299,6 +1361,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
             //* step4. 加锁
             mutex_.Lock();
 
+            //========== 临界区 begin ==========
             //* step5. 处理同步错误
             if (sync_error) {
                 // The state of the log file is indeterminate: the log record we
@@ -1320,6 +1383,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     while (true) {
         Writer* ready = writers_.front();
         writers_.pop_front();
+        // 被合并的writer
         if (ready != &w) {
             ready->status = status;
             ready->done = true;
@@ -1335,6 +1399,7 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     }
 
     return status;
+    //========== 临界区 end ==========
 }
 
 // REQUIRES: Writer list must be non-empty
@@ -1349,7 +1414,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
     mutex_.AssertHeld();
     assert(!writers_.empty());
     Writer* first = writers_.front();
-    WriteBatch* result = first->batch;      // batch结果存放的位置
+    WriteBatch* result = first->batch;  // batch结果存放的位置
     assert(result != nullptr);
 
     size_t size = WriteBatchInternal::ByteSize(first->batch);
@@ -1359,12 +1424,15 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
     // down the small write too much.
     //? 允许的batchgroup最大为1M
     size_t max_size = 1 << 20;  // 2^20 = 1M
-    //? 当writebatch太小时(size <= 128K)，限制max size，防止等待太多的small batch进行组合
+    //? 当队头的writebatch太小时(size <= 128K)，限制max size，防止等待太多的small batch进行组合
     if (size <= (128 << 10)) {
         max_size = size + (128 << 10);
     }
 
-    *last_writer = first;
+    *last_writer = first;   // 记录last_writer
+
+
+    // 从第二个writer开始合并
     std::deque<Writer*>::iterator iter = writers_.begin();
     ++iter;  // Advance past "first"
     for (; iter != writers_.end(); ++iter) {
@@ -1388,7 +1456,8 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
             if (result == first->batch) {
                 // Switch to temporary batch instead of disturbing caller's batch
                 result = tmp_batch_;
-                assert(WriteBatchInternal::Count(result) == 0); // 保证tmp_batch是clear过的
+                assert(WriteBatchInternal::Count(result) ==
+                       0);  // 保证tmp_batch是clear过的
                 WriteBatchInternal::Append(result, first->batch);
             }
             WriteBatchInternal::Append(result, w->batch);

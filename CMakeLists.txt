@@ -524,4 +524,20 @@ endif(LEVELDB_INSTALL)
 
 
 # 增加自己的部分测试内容
-add_subdirectory(rossetta_test)
+add_executable(mytest rossetta_test/rossetta_test.cpp)
+
+target_compile_definitions(mytest PRIVATE CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0")
+
+target_include_directories(
+  mytest
+  PRIVATE
+  ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_SOURCE_DIR}/db
+)
+
+target_link_libraries(
+  mytest
+  PRIVATE
+  leveldb
+)

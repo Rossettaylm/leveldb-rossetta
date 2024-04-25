@@ -75,7 +75,7 @@ class CondVar {
   CondVar& operator=(const CondVar&) = delete;
 
   void Wait() {
-    std::unique_lock<std::mutex> lock(mu_->mu_, std::adopt_lock);
+    std::unique_lock<std::mutex> lock(mu_->mu_, std::adopt_lock);       // adopt_lock，托养锁，即假设mutex为锁定状态，不负责对mutex进行加锁
     cv_.wait(lock);
     lock.release();
   }

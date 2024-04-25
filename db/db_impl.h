@@ -208,7 +208,7 @@ class DBImpl : public DB {
     // Have we encountered a background error in paranoid mode?
     Status bg_error_ GUARDED_BY(mutex_);
 
-    CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);
+    CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);      // 分level记录每层compaction的信息
 };
 
 // Sanitize db options.  The caller should delete result.info_log if

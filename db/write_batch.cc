@@ -57,9 +57,9 @@ Status WriteBatch::Iterate(Handler* handler) const {
 
     while (!input.empty()) {
         found++;
-        char tag = input[0];
+        char type = input[0];
         input.remove_prefix(1);
-        switch (tag) {
+        switch (type) {
             case kTypeValue:
                 if (GetLengthPrefixedSlice(&input, &key) &&
                     GetLengthPrefixedSlice(&input, &value)) {

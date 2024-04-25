@@ -68,6 +68,14 @@ class MemTable {
     // Add an entry into memtable that maps key to value at the
     // specified sequence number and with the specified type.
     // Typically value will be empty if type==kTypeDeletion.
+    /**
+     * @brief 添加一个entry到memtable中
+     *
+     * @param seq 键值对序列号
+     * @param type 类型value/deletion
+     * @param key 键内容，user key --> internal key
+     * @param value 值内容
+     */
     void Add(SequenceNumber seq, ValueType type, const Slice& key,
              const Slice& value);
 

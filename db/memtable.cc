@@ -110,6 +110,7 @@ Iterator* MemTable::NewIterator() { return new MemTableIterator(&table_); }
 /**
  * @brief 将key和value编码成InternalKey.size + InternalKey + Value.size() + Value = entry的形式，并分配空间存入跳表中
  * 其中InternalKey包含userkey + sequence + type
+ * //? internal key的作用是为了保证每个key在跳表中的唯一性，方便进行查询
  * @param s 当前操作的序列号
  * @param type 操作类型 put/delete
  * @param key 原始key
@@ -121,7 +122,7 @@ void MemTable::Add(SequenceNumber s, ValueType type, const Slice& key,
     // Format of an entry is concatenation of:
     //* InternalKey.size() + InternalKey
     //  key_size     : varint32 of internal_key.size()
-    //  key bytes    : char[internal_key.size()]
+    //  key bytes    : char[internal_key.size()] -- user key
     //  tag          : uint64((sequence << 8) | type)
     //* value.size() + value
     //  value_size   : varint32 of value.size()
