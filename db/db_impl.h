@@ -169,7 +169,7 @@ class DBImpl : public DB {
     const std::string dbname_;
 
     // table_cache_ provides its own synchronization
-    TableCache* const table_cache_;     // sstable cache, 用于执行对数据库的读操作
+    TableCache* const table_cache_;  // sstable cache, 用于执行对数据库的读操作
 
     // Lock over the persistent DB state.  Non-null iff successfully acquired.
     FileLock* db_lock_;
@@ -189,7 +189,7 @@ class DBImpl : public DB {
 
     // Queue of writers.
     //!通过代码注解（annotations ）告诉编译器哪些成员变量和成员函数是受哪个 mutex 保护，这样如果忘记了加锁，编译器会给警告
-    std::deque<Writer*> writers_ GUARDED_BY(mutex_);    // 多线程 writter 队列
+    std::deque<Writer*> writers_ GUARDED_BY(mutex_);  // 多线程 writter 队列
     WriteBatch* tmp_batch_ GUARDED_BY(mutex_);
 
     SnapshotList snapshots_ GUARDED_BY(mutex_);
@@ -208,11 +208,13 @@ class DBImpl : public DB {
     // Have we encountered a background error in paranoid mode?
     Status bg_error_ GUARDED_BY(mutex_);
 
-    CompactionStats stats_[config::kNumLevels] GUARDED_BY(mutex_);      // 分level记录每层compaction的信息
+    CompactionStats stats_[config::kNumLevels] GUARDED_BY(
+        mutex_);  // 分level记录每层compaction的信息
 };
 
 // Sanitize db options.  The caller should delete result.info_log if
 // it is not equal to src.info_log.
+//* 优化user给定的Options使其满足db的要求
 Options SanitizeOptions(const std::string& db,
                         const InternalKeyComparator* icmp,
                         const InternalFilterPolicy* ipolicy,

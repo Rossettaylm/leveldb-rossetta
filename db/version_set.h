@@ -5,12 +5,15 @@
 // The representation of a DBImpl consists of a set of Versions.  The
 // newest version is called "current".  Older versions may be kept
 // around to provide a consistent view to live iterators.
+//* dbimpl由version的集合组成，其中，最新的version定义为current变量，旧的version可能被保存并通过iter来提供一个持久化的视图
+
 //
 // Each Version keeps track of a set of Table files per level.  The
 // entire set of versions is maintained in a VersionSet.
 //
 // Version,VersionSet are thread-compatible, but require external
 // synchronization on all accesses.
+//* version和versionset能使用于多线程环境，但是需要通过外部的同步机制来保证线程的同步性
 
 #ifndef STORAGE_LEVELDB_DB_VERSION_SET_H_
 #define STORAGE_LEVELDB_DB_VERSION_SET_H_
@@ -39,9 +42,19 @@ class Version;
 class VersionSet;
 class WritableFile;
 
+//* Compaction, Version, VersionSet三个类互为friend
+
 // Return the smallest index i such that files[i]->largest >= key.
 // Return files.size() if there is no such file.
 // REQUIRES: "files" contains a sorted list of non-overlapping files.
+/**
+ * @brief 从files中找到对应的文件及其信息
+ *
+ * @param icmp
+ * @param files
+ * @param key
+ * @return int
+ */
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files, const Slice& key);
 
@@ -60,13 +73,19 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
 class Version {
   public:
     struct GetStats {
-        FileMetaData* seek_file;
-        int seek_file_level;
+        FileMetaData*
+            seek_file;  // 记录sstable对应的文件，fd，文件大小以及最小key和最大key等信息
+        int seek_file_level;  // 当前sstable文件所在的level
     };
 
     // Append to *iters a sequence of iterators that will
     // yield the contents of this Version when merged together.
     // REQUIRES: This version has been saved (see VersionSet::SaveTo)
+    /**
+     * @brief 将当前version中用于遍历数据库文件的iter添加到iters中
+     *
+     * @param iters
+     */
     void AddIterators(const ReadOptions&, std::vector<Iterator*>* iters);
 
     // Lookup the value for key.  If found, store it in *val and
@@ -78,19 +97,28 @@ class Version {
     // Adds "stats" into the current state.  Returns true if a new
     // compaction may need to be triggered, false otherwise.
     // REQUIRES: lock is held
+    // 添加stats到当前状态中，返回true表示需要触发新的compaction，否则返回false
     bool UpdateStats(const GetStats& stats);
 
     // Record a sample of bytes read at the specified internal key.
     // Samples are taken approximately once every config::kReadBytesPeriod
     // bytes.  Returns true if a new compaction may need to be triggered.
     // REQUIRES: lock is held
-    bool RecordReadSample(Slice key);
+    bool RecordReadSample(Slice internal_key);
 
     // Reference count management (so Versions do not disappear out from
     // under live iterators)
     void Ref();
     void Unref();
 
+    /**
+     * @brief 给定begin和end范围的key，返回所有包含这些key的文件，并放到inputs中
+     *
+     * @param level
+     * @param begin
+     * @param end
+     * @param inputs
+     */
     void GetOverlappingInputs(
         int level,
         const InternalKey* begin,  // nullptr means before all keys
@@ -142,19 +170,37 @@ class Version {
     // false, makes no more calls.
     //
     // REQUIRES: user portion of internal_key == user_key.
+    /**
+     * @brief 对Version中的每个level的文件进行查找，找到覆盖了key值的文件，并用func进行处理
+     *
+     * @param user_key
+     * @param internal_key
+     * @param arg
+     * @param func
+     */
     void ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                             bool (*func)(void*, int, FileMetaData*));
 
+    //? 所处的VersionSet集合
     VersionSet* vset_;  // VersionSet to which this Version belongs
-    Version* next_;     // Next version in linked list
-    Version* prev_;     // Previous version in linked list
-    int refs_;          // Number of live refs to this version
+
+    //? 采用双链表的形式进行存放Version *对象
+    Version* next_;  // Next version in linked list
+    Version* prev_;  // Previous version in linked list
+
+    //? 当前Version的引用计数
+    int refs_;  // Number of live refs to this version
 
     // List of files per level
-    std::vector<FileMetaData*> files_[config::kNumLevels];
+    //? 当前Version所包含的文件集合
+    std::vector<FileMetaData*> files_
+        [config::
+             kNumLevels];  // 一个config::kNumLevels大小的数组，其中每个数组是一个vector<FileMetaData *>
 
     // Next file to compact based on seek stats.
+    //? 当前Version所需要进行compaction的文件
     FileMetaData* file_to_compact_;
+
     int file_to_compact_level_;
 
     // Level that should be compacted next and its compaction score.

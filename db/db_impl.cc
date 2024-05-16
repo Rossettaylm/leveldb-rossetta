@@ -547,14 +547,14 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
                                 Version* base) {
     //* step1. 预处理，写入sstable前的准备工作
     mutex_.AssertHeld();
-    const uint64_t start_micros = env_->NowMicros();    // 记录开始时间
+    const uint64_t start_micros = env_->NowMicros();  // 记录开始时间
     FileMetaData meta;
-    meta.number = versions_->NewFileNumber();       // 生成新的文件编号
-    pending_outputs_.insert(meta.number);       // 将当前文件编号加入等待输出的队列中
+    meta.number = versions_->NewFileNumber();  // 生成新的文件编号
+    pending_outputs_.insert(meta.number);  // 将当前文件编号加入等待输出的队列中
 
     Iterator* iter = mem->NewIterator();
     Log(options_.info_log, "Level-0 table #%llu: started",
-        (unsigned long long)meta.number);       // 打印日志
+        (unsigned long long)meta.number);  // 打印日志
 
     Status s;
     {
@@ -589,7 +589,8 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 
     //* step4. 记录compaction状态
     CompactionStats stats;
-    stats.micros = env_->NowMicros() - start_micros;      // 记录当前compaction所花费的微秒数
+    stats.micros =
+        env_->NowMicros() - start_micros;  // 记录当前compaction所花费的微秒数
     stats.bytes_written = meta.file_size;
     stats_[level].Add(stats);
     return s;
@@ -1150,7 +1151,10 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
         list.push_back(imm_->NewIterator());
         imm_->Ref();
     }
+
+    //* 将当前version的数据库sstable迭代器添加到list中
     versions_->current()->AddIterators(options, &list);
+
     Iterator* internal_iter =
         NewMergingIterator(&internal_comparator_, &list[0], list.size());
     versions_->current()->Ref();
@@ -1301,8 +1305,8 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
         //========== 临界区 end ==========
         w.cv.Wait();  // writer和MutexLock用的是同一个互斥锁，其中writer的cond使用adopt_lock的形式，防止重复加锁
     }
-    //========== 临界区 begin ==========
 
+    //========== 临界区 begin ==========
     //* 情况1. 所加入的writer被其他线程处理了，返回其处理结果status
     //* 情况2. 所加入的writer到达队头，进行后续处理
     if (w.done) {
@@ -1429,8 +1433,7 @@ WriteBatch* DBImpl::BuildBatchGroup(Writer** last_writer) {
         max_size = size + (128 << 10);
     }
 
-    *last_writer = first;   // 记录last_writer
-
+    *last_writer = first;  // 记录last_writer
 
     // 从第二个writer开始合并
     std::deque<Writer*>::iterator iter = writers_.begin();

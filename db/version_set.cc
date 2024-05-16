@@ -12,6 +12,7 @@
 #include "db/table_cache.h"
 #include "db/version_set.h"
 #include "leveldb/env.h"
+#include "leveldb/iterator.h"
 #include "leveldb/table_builder.h"
 #include "table/merger.h"
 #include "table/two_level_iterator.h"
@@ -83,6 +84,14 @@ Version::~Version() {
     }
 }
 
+/**
+ * @brief 二分搜索查找files中的文件，根据最大key进行匹配
+ *
+ * @param icmp
+ * @param files
+ * @param key
+ * @return int
+ */
 int FindFile(const InternalKeyComparator& icmp,
              const std::vector<FileMetaData*>& files, const Slice& key) {
     uint32_t left = 0;
@@ -155,10 +164,14 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
 }
 
 // An internal iterator.  For a given version/level pair, yields
-// information about the files in the level.  For a given entry, key()
+// information about the files in the level.
+// For a given entry, key()
 // is the largest key that occurs in the file, and value() is an
 // 16-byte value containing the file number and file size, both
 // encoded using EncodeFixed64.
+//* 用于遍历一层level中的所有file信息
+//* 内部迭代器，通过给定的version/level的pair对，给出当前level中的files信息
+//* 对于一个给出的entry，key()为file文件中的最大key，value()为16-byte的值，包含file number和file size的编码
 class Version::LevelFileNumIterator : public Iterator {
   public:
     LevelFileNumIterator(const InternalKeyComparator& icmp,
@@ -202,12 +215,20 @@ class Version::LevelFileNumIterator : public Iterator {
   private:
     const InternalKeyComparator icmp_;
     const std::vector<FileMetaData*>* const flist_;
-    uint32_t index_;
+    uint32_t index_;  // 通过index_定位sstable的位置
 
     // Backing store for value().  Holds the file number and size.
-    mutable char value_buf_[16];
+    mutable char value_buf_[16];  // file number + file size
 };
 
+/**
+ * @brief 根据cache打开一个指向sstable文件的iter
+ *
+ * @param arg  table cache
+ * @param options
+ * @param file_value
+ * @return Iterator*
+ */
 static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
                                  const Slice& file_value) {
     TableCache* cache = reinterpret_cast<TableCache*>(arg);
@@ -220,16 +241,37 @@ static Iterator* GetFileIterator(void* arg, const ReadOptions& options,
     }
 }
 
+/**
+ * @brief 返回一个two level iter，用于遍历一个level中的所有sstable
+ * //! LevelFileNumIterator类似于table.cc中的index iter，file iterator相当于table.cc中的datablock iter
+ * //! 通过Two Level Iterator将table和level files的串联迭代器进行复用
+ * @param options
+ * @param level
+ * @return Iterator*
+ */
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
                                             int level) const {
-    return NewTwoLevelIterator(
-        new LevelFileNumIterator(vset_->icmp_, &files_[level]),
-        &GetFileIterator, vset_->table_cache_, options);
+    //* 1. 创建一个指向level中所有sstable文件的迭代器，用于作为index iterator
+    Iterator* index_iter =
+        new LevelFileNumIterator(vset_->icmp_, &files_[level]);
+
+    //* 2. 生成并返回一个two level iterator，用于遍历level 中的所有文件
+    return NewTwoLevelIterator(index_iter, &GetFileIterator,
+                               vset_->table_cache_, options);
 }
 
+/**
+ * @brief 将当前Version中的指向每个Level的迭代器放入到iters中
+ *
+ * @param options
+ * @param iters 输出迭代器列表
+ */
 void Version::AddIterators(const ReadOptions& options,
                            std::vector<Iterator*>* iters) {
     // Merge all level zero files together since they may overlap
+    //* 合并所有level 0的sstable文件，因为其可能有重叠
+    //* 将level 0中的所有sstable file的iter放入iters中
+    //* 对于level 0中的的一个文件用一个迭代器来遍历
     for (size_t i = 0; i < files_[0].size(); i++) {
         iters->push_back(vset_->table_cache_->NewIterator(
             options, files_[0][i]->number, files_[0][i]->file_size));
@@ -238,6 +280,8 @@ void Version::AddIterators(const ReadOptions& options,
     // For levels > 0, we can use a concatenating iterator that sequentially
     // walks through the non-overlapping files in the level, opening them
     // lazily.
+    //* 对于level > 0的sstable文件是没有重叠overlap的部分的，通过串联的迭代器，用一个迭代器遍历一层的所有sstable
+    //* 对于level > 0的每一层所有文件，只用一个two level iterator来进行遍历
     for (int level = 1; level < config::kNumLevels; level++) {
         if (!files_[level].empty()) {
             iters->push_back(NewConcatenatingIterator(options, level));
@@ -284,25 +328,42 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
     const Comparator* ucmp = vset_->icmp_.user_comparator();
 
     // Search level-0 in order from newest to oldest.
+    // Create a temporary vector to store the file metadata.
+    //* 1. 创建一个tmp list用于存放level 0的查找到的文件
     std::vector<FileMetaData*> tmp;
+    // Reserve some space for the vector.
     tmp.reserve(files_[0].size());
+    // Iterate through the files.
+
+    //* 2. 遍历level 0的文件，将符合条件的文件添加到tmp list中
     for (uint32_t i = 0; i < files_[0].size(); i++) {
+        // Get the file metadata.
         FileMetaData* f = files_[0][i];
+        // Check if the file is within the user's range.
         if (ucmp->Compare(user_key, f->smallest.user_key()) >= 0 &&
             ucmp->Compare(user_key, f->largest.user_key()) <= 0) {
-            tmp.push_back(f);
+            // Add the file metadata to the temporary vector.
+            tmp.push_back(
+                f);  // 如果user key在文件最小key和最大key的范围内，则将其添加到临时向量中
         }
     }
+    // If there are any files within the user's range.
+    //* 3. 调用func对查询到的overlap file进行处理
     if (!tmp.empty()) {
+        // Sort the files from newest to oldest.
         std::sort(tmp.begin(), tmp.end(), NewestFirst);
+        // Iterate through the files.
         for (uint32_t i = 0; i < tmp.size(); i++) {
+            // Call the function with the file metadata.
             if (!(*func)(arg, 0, tmp[i])) {
+                // Return if the function returns false.
                 return;
             }
         }
     }
 
     // Search other levels.
+    //* 4. 搜索其他level的文件，是否有包含user key的文件
     for (int level = 1; level < config::kNumLevels; level++) {
         size_t num_files = files_[level].size();
         if (num_files == 0) continue;
@@ -414,11 +475,13 @@ bool Version::UpdateStats(const GetStats& stats) {
 }
 
 bool Version::RecordReadSample(Slice internal_key) {
+    //* step1. 从interanl key中进行解析得到type sequence user_key
     ParsedInternalKey ikey;
     if (!ParseInternalKey(internal_key, &ikey)) {
         return false;
     }
 
+    //* step2. 定义新的State结构体
     struct State {
         GetStats stats;  // Holds first matching file
         int matches;
@@ -428,6 +491,7 @@ bool Version::RecordReadSample(Slice internal_key) {
             state->matches++;
             if (state->matches == 1) {
                 // Remember first match.
+                // 记住第一次匹配到的文件
                 state->stats.seek_file = f;
                 state->stats.seek_file_level = level;
             }
@@ -438,12 +502,15 @@ bool Version::RecordReadSample(Slice internal_key) {
 
     State state;
     state.matches = 0;
+
+    //* 对文件中的key进行进行match，并统计其match次数
     ForEachOverlapping(ikey.user_key, internal_key, &state, &State::Match);
 
     // Must have at least two matches since we want to merge across
     // files. But what if we have a single file that contains many
     // overwrites and deletions?  Should we have another mechanism for
     // finding such files?
+    //* 多次匹配到，说明userkey在多个文件中出现，需要进行merge
     if (state.matches >= 2) {
         // 1MB cost is about 1 seek (see comment in Builder::Apply).
         return UpdateStats(state.stats);
@@ -522,10 +589,18 @@ void Version::GetOverlappingInputs(int level, const InternalKey* begin,
                    user_cmp->Compare(file_start, user_end) > 0) {
             // "f" is completely after specified range; skip it
         } else {
+            //* files_begin -- files_end 包含了给定的user_begin, user_end的其中一部分
             inputs->push_back(f);
             if (level == 0) {
                 // Level-0 files may overlap each other.  So check if the newly
                 // added file has expanded the range.  If so, restart search.
+                //* Level 0的文件可能有重叠。检查新文件是否扩展了之前的范围，如果是，则扩展userkey范围并从头开始搜索
+                //* Level-0 file1: [30, 100], file2: [70, 200]
+                //* user range: [80, 150]
+                //* 1. file1和user range有重叠，将其加入inputs中
+                //* 2. file2和user range有重叠，将其加入inputs中
+                //* 3. file2的file_start小于user begin，此时只需要一个file2就能将user range完全覆盖，因此将user begin置为70，并清空inputs从头开始搜索
+                //* 4. 从头开始搜索，file1不满足条件，但是file2能加入inputs中
                 if (begin != nullptr &&
                     user_cmp->Compare(file_start, user_begin) < 0) {
                     user_begin = file_start;

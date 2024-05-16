@@ -24,14 +24,14 @@ namespace {
 class TwoLevelIterator : public Iterator {
   public:
     /**
-    * @brief 构造一个二级迭代器用于遍历sstable的data blocks
+    * @brief 构造一个二级迭代器用于遍历sstable的data blocks/遍历level files的file
     *
     * @param index_iter index block iterator
     * @param block_function 生成block_iterator的函数
     * @param arg : Table* 即sstable对象
     * @param options : ReadOptions 读取选项
     */
-    TwoLevelIterator(Iterator* index_iter, BlockFunction block_function,
+    TwoLevelIterator(Iterator* index_iter, SecondIterYieldFunction block_function,
                      void* arg, const ReadOptions& options);
 
     ~TwoLevelIterator() override;
@@ -77,7 +77,7 @@ class TwoLevelIterator : public Iterator {
     //* 根据index iter的key值来初始化一个data block iterator
     void InitDataBlock();
 
-    BlockFunction block_function_;
+    SecondIterYieldFunction block_function_;
     void* arg_;  // Table *
     const ReadOptions options_;
     Status status_;
@@ -89,7 +89,7 @@ class TwoLevelIterator : public Iterator {
 };
 
 TwoLevelIterator::TwoLevelIterator(Iterator* index_iter,
-                                   BlockFunction block_function, void* arg,
+                                   SecondIterYieldFunction block_function, void* arg,
                                    const ReadOptions& options)
     : block_function_(block_function),
       arg_(arg),
@@ -200,7 +200,7 @@ void TwoLevelIterator::InitDataBlock() {
 }  // namespace
 
 Iterator* NewTwoLevelIterator(Iterator* index_iter,
-                              BlockFunction block_function, void* arg,
+                              SecondIterYieldFunction block_function, void* arg,
                               const ReadOptions& options) {
     return new TwoLevelIterator(index_iter, block_function, arg, options);
 }

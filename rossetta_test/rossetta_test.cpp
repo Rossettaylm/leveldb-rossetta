@@ -1,3 +1,4 @@
+#include <cstring>
 #include <leveldb/db.h>
 #include <unistd.h>
 
@@ -5,6 +6,7 @@
 #include <cstdio>
 #include <iostream>
 #include <random>
+#include <vector>
 
 #include "leveldb/iterator.h"
 #include "leveldb/options.h"
@@ -55,8 +57,19 @@ void printArgs(int arg_count, ...) {
     va_end(va);
 }
 
+struct Values {
+    std::vector<int> values;
+
+    Values() {
+        memset(this, 0x00, sizeof(Values));
+    }
+};
+
 int main() {
-    printArgs(2, "dingshi", "dingshi", "nihao");
+    // printArgs(2, "dingshi", "dingshi", "nihao");
+
+    // int re = MyLeveldbTest();
+
 
     return 0;
 }

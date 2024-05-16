@@ -11,7 +11,7 @@ namespace leveldb {
 
 struct ReadOptions;
 
-using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
+using SecondIterYieldFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
 
 //! 通过二级迭代器来访问sstable
 // Return a new two level iterator.  A two-level iterator contains an
@@ -40,7 +40,7 @@ using BlockFunction = Iterator* (*)(void*, const ReadOptions&, const Slice&);
  * @return Iterator* 二级迭代器
  */
 Iterator* NewTwoLevelIterator(Iterator* index_iter,
-                              BlockFunction block_function, void* arg,
+                              SecondIterYieldFunction block_function, void* arg,
                               const ReadOptions& options);
 
 }  // namespace leveldb
