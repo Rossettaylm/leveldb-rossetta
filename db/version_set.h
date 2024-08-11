@@ -104,6 +104,9 @@ class Version {
     // Samples are taken approximately once every config::kReadBytesPeriod
     // bytes.  Returns true if a new compaction may need to be triggered.
     // REQUIRES: lock is held
+    //* 通过阅读采样数据来判断是否需要进行出发压缩机制
+    //* 程序定期对kReadBytesPeriod个字节进行采样，并记录下来
+    //* 如果采样数据超过阈值，则触发压缩机制
     bool RecordReadSample(Slice internal_key);
 
     // Reference count management (so Versions do not disappear out from
@@ -206,6 +209,7 @@ class Version {
     // Level that should be compacted next and its compaction score.
     // Score < 1 means compaction is not strictly needed.  These fields
     // are initialized by Finalize().
+    // 当compaction score >= 1时表示需要进行compaction
     double compaction_score_;
     int compaction_level_;
 };
@@ -399,6 +403,7 @@ class Compaction {
 
     // Returns true iff we should stop building the current output
     // before processing "internal_key".
+    // 非常顶级的一个文字
     bool ShouldStopBefore(const Slice& internal_key);
 
     // Release the input version for the compaction, once the compaction

@@ -104,9 +104,9 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
     char* buf = new char[n + kBlockTrailerSize];
 
     Slice contents;
-    Status s =
-        file->Read(handle.offset(), n + kBlockTrailerSize, &contents,
-                   buf);  // 从file中读取block size + trailer size数据到contents中,同时通过buf作为scratch
+    Status s = file->Read(
+        handle.offset(), n + kBlockTrailerSize, &contents,
+        buf);  // 从file中读取block size + trailer size数据到contents中,同时通过buf作为scratch
     if (!s.ok()) {
         delete[] buf;  // 读取错误,释放内存
         return s;
@@ -143,12 +143,13 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
                 delete[] buf;
                 result->data = Slice(data, n);
                 result->heap_allocated = false;
-                result->cachable = false;  // Do not double-cache //? 是否已经在File内部被cache过了?
+                result->cachable =
+                    false;  // Do not double-cache //? 是否已经在File内部被cache过了?
             } else {
                 //* 此时使用我们自己分配的堆内存存放了读取block的内容,需要手动释放
                 result->data = Slice(buf, n);
                 result->heap_allocated = true;
-                result->cachable = true; // 设置为可以进行cache的
+                result->cachable = true;  // 设置为可以进行cache的
             }
 
             // Ok

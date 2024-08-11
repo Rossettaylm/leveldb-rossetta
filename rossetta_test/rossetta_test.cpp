@@ -1,9 +1,9 @@
-#include <cstring>
 #include <leveldb/db.h>
 #include <unistd.h>
 
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <random>
 #include <vector>
@@ -60,16 +60,13 @@ void printArgs(int arg_count, ...) {
 struct Values {
     std::vector<int> values;
 
-    Values() {
-        memset(this, 0x00, sizeof(Values));
-    }
+    Values() { memset(this, 0x00, sizeof(Values)); }
 };
 
 int main() {
     // printArgs(2, "dingshi", "dingshi", "nihao");
 
     // int re = MyLeveldbTest();
-
 
     return 0;
 }

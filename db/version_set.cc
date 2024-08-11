@@ -3,6 +3,7 @@
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
 #include <algorithm>
+#include <cassert>
 #include <cstdio>
 
 #include "db/filename.h"
@@ -11,6 +12,7 @@
 #include "db/memtable.h"
 #include "db/table_cache.h"
 #include "db/version_set.h"
+#include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
 #include "leveldb/table_builder.h"
@@ -126,6 +128,17 @@ static bool BeforeFile(const Comparator* ucmp, const Slice* user_key,
             ucmp->Compare(*user_key, f->smallest.user_key()) < 0);
 }
 
+/**
+ * @brief 判断给定的范围是否和文件有overlap
+ *
+ * @param icmp
+ * @param disjoint_sorted_files 排序标志，判定是否需要遍历所有文件
+ * @param files 给定的文件列表
+ * @param smallest_user_key 给定最小key
+ * @param largest_user_key 给定最大key
+ * @return true 有overlap
+ * @return false
+ */
 bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
                            bool disjoint_sorted_files,
                            const std::vector<FileMetaData*>& files,
@@ -134,6 +147,7 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
     const Comparator* ucmp = icmp.user_comparator();
     if (!disjoint_sorted_files) {
         // Need to check against all files
+        // 遍历所有file并检查[smallest, largest]范围是否和file有overlap
         for (size_t i = 0; i < files.size(); i++) {
             const FileMetaData* f = files[i];
             if (AfterFile(ucmp, smallest_user_key, f) ||
@@ -147,6 +161,7 @@ bool SomeFileOverlapsRange(const InternalKeyComparator& icmp,
     }
 
     // Binary search over file list
+    // 进行二分搜索
     uint32_t index = 0;
     if (smallest_user_key != nullptr) {
         // Find the earliest possible internal key for smallest_user_key
@@ -188,10 +203,15 @@ class Version::LevelFileNumIterator : public Iterator {
     void SeekToLast() override {
         index_ = flist_->empty() ? 0 : flist_->size() - 1;
     }
+    // void Next() override {
+    //     assert(Valid());
+    //     index_++;
+    // }
     void Next() override {
         assert(Valid());
         index_++;
     }
+
     void Prev() override {
         assert(Valid());
         if (index_ == 0) {
@@ -323,6 +343,14 @@ static bool NewestFirst(FileMetaData* a, FileMetaData* b) {
     return a->number > b->number;
 }
 
+/**
+ * @brief 遍历所有文件,查询是否存在user key,如果存在则调用func进行处理,func如何返回false则直接return
+ *
+ * @param user_key
+ * @param internal_key
+ * @param arg
+ * @param func   handle function return false代表结束处理
+ */
 void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
                                  bool (*func)(void*, int, FileMetaData*)) {
     const Comparator* ucmp = vset_->icmp_.user_comparator();
@@ -351,12 +379,15 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
     //* 3. 调用func对查询到的overlap file进行处理
     if (!tmp.empty()) {
         // Sort the files from newest to oldest.
-        std::sort(tmp.begin(), tmp.end(), NewestFirst);
+        std::sort(
+            tmp.begin(), tmp.end(),
+            NewestFirst);  // 对tmp list进行排序, FileMetaData->number越大越新
         // Iterate through the files.
         for (uint32_t i = 0; i < tmp.size(); i++) {
             // Call the function with the file metadata.
             if (!(*func)(arg, 0, tmp[i])) {
                 // Return if the function returns false.
+                //* 如果func返回false，则直接返回
                 return;
             }
         }
@@ -383,6 +414,16 @@ void Version::ForEachOverlapping(Slice user_key, Slice internal_key, void* arg,
     }
 }
 
+/**
+ * @brief 调用ForEachoverlapping进行遍历,match函数则通过cache中的table进行internalget的table查找
+ * match到了则退出并记录
+ *
+ * @param options
+ * @param k
+ * @param value
+ * @param stats
+ * @return Status
+ */
 Status Version::Get(const ReadOptions& options, const LookupKey& k,
                     std::string* value, GetStats* stats) {
     stats->seek_file = nullptr;
@@ -406,6 +447,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
             if (state->stats->seek_file == nullptr &&
                 state->last_file_read != nullptr) {
                 // We have had more than one seek for this read.  Charge the 1st file.
+                //* 一次read可能match到多次,记录第一个match到的文件到seek_file中
                 state->stats->seek_file = state->last_file_read;
                 state->stats->seek_file_level = state->last_file_read_level;
             }
@@ -423,6 +465,7 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
             switch (state->saver.state) {
                 case kNotFound:
                     return true;  // Keep searching in other files
+                                  // return true说明还需要继续match
                 case kFound:
                     state->found = true;
                     return false;
@@ -456,8 +499,10 @@ Status Version::Get(const ReadOptions& options, const LookupKey& k,
     state.saver.user_key = k.user_key();
     state.saver.value = value;
 
+    //* 针对每个overlap了的key，进行match
     ForEachOverlapping(state.saver.user_key, state.ikey, &state, &State::Match);
 
+    // state.found时: 真的found到了/iter出现错误status报错
     return state.found ? state.s : Status::NotFound(Slice());
 }
 
@@ -503,14 +548,14 @@ bool Version::RecordReadSample(Slice internal_key) {
     State state;
     state.matches = 0;
 
-    //* 对文件中的key进行进行match，并统计其match次数
+    //* 遍历所有包含ikey的sstable文件，进行match，判断ikey是否重复出现，如果是则直接return
     ForEachOverlapping(ikey.user_key, internal_key, &state, &State::Match);
 
     // Must have at least two matches since we want to merge across
     // files. But what if we have a single file that contains many
     // overwrites and deletions?  Should we have another mechanism for
     // finding such files?
-    //* 多次匹配到，说明userkey在多个文件中出现，需要进行merge
+    //* 多次match到，说明userkey在多个文件中出现，需要进行merge
     if (state.matches >= 2) {
         // 1MB cost is about 1 seek (see comment in Builder::Apply).
         return UpdateStats(state.stats);
@@ -535,9 +580,18 @@ bool Version::OverlapInLevel(int level, const Slice* smallest_user_key,
                                  smallest_user_key, largest_user_key);
 }
 
+/**
+ * @brief 给定一个memtable的key值范围，选择一个合适的level作为memtable的输出
+ *
+ * @param smallest_user_key
+ * @param largest_user_key
+ * @return int
+ */
 int Version::PickLevelForMemTableOutput(const Slice& smallest_user_key,
                                         const Slice& largest_user_key) {
     int level = 0;
+
+    //* 如果没有overlap，则不需要放到第0层，向下寻找合适的层数
     if (!OverlapInLevel(0, &smallest_user_key, &largest_user_key)) {
         // Push to next level if there is no overlap in next level,
         // and the #bytes overlapping in the level after that are limited.
@@ -548,10 +602,12 @@ int Version::PickLevelForMemTableOutput(const Slice& smallest_user_key,
         while (level < config::kMaxMemCompactLevel) {
             if (OverlapInLevel(level + 1, &smallest_user_key,
                                &largest_user_key)) {
+                // 如果下一层overlap了，则直接跳出，还是在当前层输出
                 break;
             }
             if (level + 2 < config::kNumLevels) {
                 // Check that file does not overlap too many grandparent bytes.
+                // 如果下下层overlap了当前key的文件太大，则直接跳出，还是在当前层输出
                 GetOverlappingInputs(level + 2, &start, &limit, &overlaps);
                 const int64_t sum = TotalFileSize(overlaps);
                 if (sum > MaxGrandParentOverlapBytes(vset_->options_)) {
@@ -561,10 +617,20 @@ int Version::PickLevelForMemTableOutput(const Slice& smallest_user_key,
             level++;
         }
     }
+
+    //* 存在overlap只能放到level 0，等待合并
     return level;
 }
 
 // Store in "*inputs" all files in "level" that overlap [begin,end]
+/**
+ * @brief 将level中所有包含[begin, end]的文件放入到inputs中
+ *
+ * @param level
+ * @param begin
+ * @param end
+ * @param inputs
+ */
 void Version::GetOverlappingInputs(int level, const InternalKey* begin,
                                    const InternalKey* end,
                                    std::vector<FileMetaData*>* inputs) {
@@ -578,6 +644,7 @@ void Version::GetOverlappingInputs(int level, const InternalKey* begin,
     if (end != nullptr) {
         user_end = end->user_key();
     }
+    auto cmp = vset_->icmp_.user_comparator();
     const Comparator* user_cmp = vset_->icmp_.user_comparator();
     for (size_t i = 0; i < files_[level].size();) {
         FileMetaData* f = files_[level][i++];
@@ -1480,6 +1547,7 @@ void AddBoundaryInputs(const InternalKeyComparator& icmp,
 
 void VersionSet::SetupOtherInputs(Compaction* c) {
     const int level = c->level();
+
     InternalKey smallest, largest;
 
     AddBoundaryInputs(icmp_, current_->files_[level], &c->inputs_[0]);

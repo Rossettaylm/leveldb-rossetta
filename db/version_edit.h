@@ -28,6 +28,10 @@ struct FileMetaData {
         largest;  // Largest internal key served by table -- sstable文件中最大key
 };
 
+/**
+ * @brief edit一次版本的信息，记录在manifest文件中
+ *
+ */
 class VersionEdit {
   public:
     VersionEdit() { Clear(); }

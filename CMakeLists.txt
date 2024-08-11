@@ -9,6 +9,13 @@ project(leveldb VERSION 1.23.0 LANGUAGES C CXX)
 # 到处compile_commands.json给clangd使用
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# 规整一下输出目录
+set(OUTPUT_DIR ${CMAKE_SOURCE_DIR}/out/${CMAKE_BUILD_TYPE})
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/lib)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/lib)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_DIR}/bin)
+
+
 # C standard can be overridden when this is used as a sub-project.
 if(NOT CMAKE_C_STANDARD)
   # This project can use C11, but will gracefully decay down to C89.
@@ -18,6 +25,7 @@ if(NOT CMAKE_C_STANDARD)
 endif(NOT CMAKE_C_STANDARD)
 
 # C++ standard can be overridden when this is used as a sub-project.
+# if(NOT ...)的作用来保证leveldb作为子项目时，可以被覆盖设置
 if(NOT CMAKE_CXX_STANDARD)
   # This project requires C++11.
   set(CMAKE_CXX_STANDARD 11)
@@ -37,6 +45,8 @@ option(LEVELDB_BUILD_TESTS "Build LevelDB's unit tests" ON)
 option(LEVELDB_BUILD_BENCHMARKS "Build LevelDB's benchmarks" ON)
 option(LEVELDB_INSTALL "Install LevelDB's header and library" ON)
 
+### 一些平台或者flag相关的设置和检查
+# include cmake自带的系统函数检验文件是否存在
 include(CheckIncludeFile)
 check_include_file("unistd.h" HAVE_UNISTD_H)
 
@@ -62,7 +72,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHs-c-")
   add_definitions(-D_HAS_EXCEPTIONS=0)
 
-  # Disable RTTI.
+  # Disable RTTI. 禁止在运行时检查对象类型
   string(REGEX REPLACE "/GR" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /GR-")
 else(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -99,6 +109,7 @@ check_cxx_source_compiles("
 int main() { std::string str; return 0; }
 " HAVE_CXX17_HAS_INCLUDE)
 
+### 设置头文件目录
 set(LEVELDB_PUBLIC_INCLUDE_DIR "include/leveldb")
 set(LEVELDB_PORT_CONFIG_DIR "include/port")
 
